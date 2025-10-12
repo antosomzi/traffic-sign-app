@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording Status</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+
+        .recording-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+
+        .recording-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .recording-id {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .status-badge.validated {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-badge.processing {
+            background: #cfe2ff;
+            color: #084298;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-badge.completed {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+
+        .status-badge.error {
+            background: #f8d7da;
+            color: #842029;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .status-message {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        .steps-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .step {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .step.done {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+
+        .step.pending {
+            background: #e2e3e5;
+            color: #6c757d;
+        }
+
+        .step-icon {
+            font-size: 16px;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 10px;
+            transition: transform 0.2s ease;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .refresh-btn {
+            background: #f0f0f0;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+
+        .refresh-btn:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h1>📊 Recording Status</h1>
+            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+        </div>
+        <p class="subtitle">Track the processing progress of your recordings</p>
+
+        <a href="/" class="nav-link">← Back to Upload</a>
+
+        {% if recordings %}
+            {% for rec in recordings %}
+            <div class="recording-card">
+                <div class="recording-header">
+                    <div>
+                        <div class="recording-id">🎥 {{ rec.id }}</div>
+                        {% if rec.timestamp %}
+                        <div class="timestamp">📅 {{ rec.timestamp[:19].replace('T', ' ') }}</div>
+                        {% endif %}
+                    </div>
+                    <span class="status-badge {{ rec.status }}">
+                        {% if rec.status == "completed" %}
+                            ✅ Completed
+                        {% elif rec.status == "processing" %}
+                            ⏳ In Progress
+                        {% elif rec.status == "validated" %}
+                            📋 Validated
+                        {% elif rec.status == "error" %}
+                            ❌ Error
+                        {% else %}
+                            {{ rec.status }}
+                        {% endif %}
+                    </span>
+                </div>
+
+                {% if rec.message %}
+                <div class="status-message">{{ rec.message }}</div>
+                {% endif %}
+
+                {% if rec.show_steps and rec.steps %}
+                <div class="steps-container">
+                    {% for step in rec.steps %}
+                    <div class="step {% if step.done %}done{% else %}pending{% endif %}">
+                        <span class="step-icon">{% if step.done %}✅{% else %}⏳{% endif %}</span>
+                        <span>{{ step.name }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if rec.status == "completed" %}
+                <a href="/download/{{ rec.id }}" class="download-btn">📥 Download Results</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h2>No Recordings</h2>
+            <p>Start by uploading a ZIP file</p>
+            <a href="/" class="download-btn" style="margin-top: 20px;">Upload Now</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Auto-refresh every 10 seconds if processing is in progress
+        const recordings = {{ recordings|tojson|safe }};
+        const hasProcessing = recordings.some(r => r.status === 'processing' || r.status === 'validated');
+        
+        if (hasProcessing) {
+            setTimeout(() => {
+                location.reload();
+            }, 10000);
+        }
+    </script>
+</body>
+</html>
