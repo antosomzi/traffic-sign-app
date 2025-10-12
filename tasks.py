@@ -5,8 +5,8 @@ import time
 import json
 
 # Configuration - Auto-detect environment (EC2 vs local)
-if os.path.exists("/home/ec2-user/app"):
-    BASE_PATH = "/home/ec2-user/app"
+if os.path.exists("/home/ec2-user"):
+    BASE_PATH = "/home/ec2-user"
 else:
     BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
