@@ -5,9 +5,24 @@ Web application for uploading, validating, and asynchronously processing recordi
 ## 🏗️ Architecture
 
 - **Flask**: Web interface, upload, extraction and validation of ZIP archives
-- **Redis**: Message broker for Celery task queue
+- **Redis**: 
+  - Message broker for Celery task queue
+  - Shared state storage for extraction progress (across Gunicorn workers)
 - **Celery**: Asynchronous worker for ML pipeline processing
+- **Gunicorn**: Production WSGI server with 4 worker processes
 - **Shared filesystem**: Storage for uploads and results
+
+### Multi-Worker Architecture
+
+The application uses **Gunicorn with 4 workers** for production. Since each worker has its own memory space, Redis is used to share the extraction progress state between workers:
+
+```
+Request 1 (Upload) → Worker #1 → Creates extraction progress in Redis
+Request 2 (Status) → Worker #3 → Reads extraction progress from Redis ✅
+Request 3 (Status) → Worker #2 → Reads extraction progress from Redis ✅
+```
+
+Without Redis, each worker would have its own `extraction_progress = {}` dictionary, causing 404 errors when different workers handle the status requests.
 
 ## 📁 Project Structure
 
@@ -161,6 +176,48 @@ La pipeline comporte 8 étapes :
 
 ## 🔧 Configuration
 
+### Redis for Extraction Progress
+
+Redis stores extraction progress as JSON strings with the following structure:
+
+**Redis Key Format:**
+```
+extraction:<job_id>
+```
+
+**Value (JSON):**
+```json
+{
+  "status": "running",           // "queued", "running", "done", "error"
+  "total_files": 250,             // Total files in ZIP
+  "extracted_files": 120,         // Files extracted so far
+  "extract_size": 1024000,        // Final size in bytes (null until done)
+  "recording_id": "2024_05_...",  // Recording ID (null until done)
+  "error_msg": null,              // Error message if status="error"
+  "error_details": null           // Detailed error info (dict)
+}
+```
+
+**TTL (Time To Live):** 1 hour (3600 seconds) - Redis automatically deletes old entries
+
+**Update Frequency:** Progress is updated every 10 files during extraction to optimize performance.
+
+### Helper Functions
+
+```python
+# Read from Redis (JSON string → Python dict)
+prog = get_extraction_progress(job_id)
+
+# Write to Redis (Python dict → JSON string)
+set_extraction_progress(job_id, progress_dict)
+
+# Modify in Python (standard dict operations)
+prog["status"] = "running"
+prog["extracted_files"] += 1
+```
+
+### File Paths
+
 Les chemins par défaut sont configurés pour EC2 dans `/home/ec2-user/`:
 
 - `uploads/` - Fichiers uploadés
@@ -176,12 +233,53 @@ Pour modifier, éditez les constantes dans `app.py` et `tasks.py`.
 # Vérifier si Redis tourne
 redis-cli ping
 # Devrait retourner "PONG"
+
+# Sur EC2 avec mot de passe
+redis6-cli -a Moulines1 ping
 ```
+
+### Vérifier les données Redis
+```bash
+# Voir toutes les clés extraction
+redis6-cli -a Moulines1 KEYS "extraction:*"
+
+# Voir le contenu d'une clé
+redis6-cli -a Moulines1 GET "extraction:abc123..."
+
+# Voir le temps restant avant expiration
+redis6-cli -a Moulines1 TTL "extraction:abc123..."
+
+# Supprimer une clé manuellement
+redis6-cli -a Moulines1 DEL "extraction:abc123..."
+
+# Vider toute la base Redis (ATTENTION!)
+redis6-cli -a Moulines1 FLUSHDB
+```
+
+### Problème de barre de progression bloquée
+
+Si la barre de progression reste à 0% puis saute à 100% :
+- **Cause**: Le dictionnaire `extraction_progress` n'est pas partagé entre workers Gunicorn
+- **Solution**: Redis est maintenant utilisé pour partager l'état entre workers ✅
 
 ### Celery ne trouve pas les tâches
 ```bash
 # Vérifier que vous êtes dans le bon répertoire
-celery -A tasks inspect active
+celery -A celery_app inspect active
+
+# Vérifier que tasks.py est bien importé dans celery_app.py
+grep "import tasks" celery_app.py
+```
+
+### Erreur "Command 'bash' not found" (Celery)
+
+Si Celery ne trouve pas `bash` lors de l'exécution de `simulate_pipeline.sh` :
+- **Cause**: La variable `PATH` n'est pas définie dans le service systemd
+- **Solution**: Ajouter `Environment="PATH=/usr/bin:/bin"` dans `/etc/systemd/system/celery-worker.service`
+
+```ini
+[Service]
+Environment="PATH=/home/ec2-user/app/venv/bin:/usr/local/bin:/usr/bin:/bin"
 ```
 
 ### Problèmes de permissions
@@ -196,6 +294,20 @@ chmod +x simulate_pipeline.sh
 - Le worker Celery traite les tâches **séquentiellement**
 - Les fichiers ZIP sont supprimés après extraction réussie
 - En cas d'erreur de validation, tout est nettoyé automatiquement
+- **Redis stocke les progrès d'extraction pendant 1 heure** (TTL = 3600s)
+- **Gunicorn utilise 4 workers** en production pour gérer les requêtes simultanées
+- **La barre de progression se met à jour toutes les 10 fichiers** pour optimiser les performances
+- **Le frontend poll le status toutes les 300ms** pour une progression fluide
+
+### Pourquoi Redis pour l'extraction progress ?
+
+Avec Gunicorn (4 workers), chaque worker a sa propre mémoire. Sans Redis :
+- Worker #1 extrait le ZIP et stocke `extraction_progress[job_id]` dans **sa mémoire**
+- Worker #2 reçoit une requête `/extract_status/<job_id>` mais ne voit **rien** dans sa mémoire → 404 !
+
+Avec Redis :
+- Worker #1 écrit dans Redis : `SET extraction:job_id {...}`
+- Worker #2, #3, #4 lisent depuis Redis : `GET extraction:job_id` → ✅ Partagé !
 
 ## 🔐 Sécurité
 
