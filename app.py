@@ -452,6 +452,7 @@ def upload_recording():
             except Exception as e:
                 print(f"⚠️ Could not queue pipeline task: {e}")
 
+    # Start extraction in background thread
     thread = threading.Thread(target=extract_and_queue_pipeline, daemon=True)
     thread.start()
 
