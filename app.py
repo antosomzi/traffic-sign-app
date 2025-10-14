@@ -251,24 +251,12 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
     final_path = None
 
     try:
-        # Step 1: Opening ZIP
+        # Open ZIP and start extraction
         prog["status"] = "running"
-        prog["message"] = "Opening ZIP archive..."
-        prog["simulated_percent"] = 10
         set_extraction_progress(job_id, prog)
         
         with zipfile.ZipFile(zip_path, "r") as z:
-            # Step 2: Reading file list
-            prog["message"] = "Reading file list..."
-            prog["simulated_percent"] = 25
-            set_extraction_progress(job_id, prog)
-            
             members = z.infolist()
-            
-            # Step 3: Filtering files
-            prog["message"] = "Filtering system files..."
-            prog["simulated_percent"] = 40
-            set_extraction_progress(job_id, prog)
             
             # Filter out macOS system files
             members = [m for m in members if not (
@@ -278,17 +266,9 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
                 m.filename.startswith("._")
             )]
             
-            # Step 4: Validating structure
-            prog["message"] = "Validating archive structure..."
-            prog["simulated_percent"] = 55
-            set_extraction_progress(job_id, prog)
-            
             total_files = len(members)
             prog["total_files"] = total_files
             prog["extracted_files"] = 0
-            prog["message"] = None  # Clear message, now using real progress
-            prog["simulated_percent"] = None
-            # Status already set to "running" above
             set_extraction_progress(job_id, prog)
 
             # Identify root folder in ZIP
@@ -429,9 +409,7 @@ def upload_recording():
         "extract_size": None,
         "recording_id": None,
         "error_msg": None,
-        "error_details": None,
-        "message": None,  # For simulated progress messages
-        "simulated_percent": None  # For simulated progress percentage
+        "error_details": None
     }
     set_extraction_progress(job_id, initial_progress)
 
@@ -471,24 +449,13 @@ def extract_status(job_id):
     if status == "running":
         total = prog["total_files"]
         done = prog["extracted_files"]
-        
-        # Check if we're in simulated progress mode (before actual extraction)
-        if prog.get("simulated_percent") is not None:
-            return jsonify({
-                "status": "running",
-                "percent": prog["simulated_percent"],
-                "message": prog.get("message", "Preparing..."),
-                "simulated": True
-            }), 200
-        
-        # Real extraction progress
         percent = (done / total) * 100 if total > 0 else 0
+        
         return jsonify({
             "status": "running",
             "total_files": total,
             "extracted_files": done,
-            "percent": percent,
-            "simulated": False
+            "percent": percent
         }), 200
 
     if status == "done":

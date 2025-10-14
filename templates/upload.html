@@ -313,26 +313,21 @@
         });
 
         async function pollExtractionStatus(jobId) {
+            let queuedProgress = 0;
             const interval = setInterval(async () => {
                 try {
                     const response = await fetch(`/extract_status/${jobId}`);
                     const data = await response.json();
 
                     if (data.status === 'queued') {
-                        // Show a message while preparing
-                        progressText.textContent = 'Preparing extraction...';
+                        // Simulate slow progress while queued (0% -> 5%)
+                        queuedProgress = Math.min(queuedProgress + 0.5, 5);
+                        progressFill.style.width = `${queuedProgress}%`;
+                        progressText.textContent = 'Uploading and preparing archive...';
                     } else if (data.status === 'running') {
                         const percent = data.percent || 0;
                         progressFill.style.width = `${percent}%`;
-                        
-                        // Check if it's simulated progress or real extraction
-                        if (data.simulated) {
-                            // Show simulated progress message
-                            progressText.textContent = data.message || 'Preparing...';
-                        } else {
-                            // Show real extraction progress
-                            progressText.textContent = `Extracting: ${data.extracted_files}/${data.total_files} files (${percent.toFixed(1)}%)`;
-                        }
+                        progressText.textContent = `Extracting: ${data.extracted_files}/${data.total_files} files (${percent.toFixed(1)}%)`;
                     } else if (data.status === 'done') {
                         clearInterval(interval);
                         progressFill.style.width = '100%';
@@ -370,7 +365,7 @@
                     uploadBtn.disabled = false;
                     progressContainer.style.display = 'none';
                 }
-            }, 1000);
+            }, 300);  // Poll every 300ms for smoother progress
         }
 
         function showMessage(type, text) {
