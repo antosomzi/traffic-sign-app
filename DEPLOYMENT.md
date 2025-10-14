@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- EC2 instance running Amazon Linux 2 or similar
+- EC2 instance running Amazon Linux 2023
 - Python 3.11+
-- Redis installed
+- Redis 6 installed
 - Git installed
 
 ## Installation Steps
@@ -12,8 +12,8 @@
 ### 1. Install System Dependencies
 
 ```bash
-sudo yum update -y
-sudo yum install -y python3 python3-pip redis git
+sudo dnf update -y
+sudo dnf install -y python3 python3-pip redis6 git
 ```
 
 ### 2. Clone Repository
@@ -36,18 +36,18 @@ pip install -r requirements.txt
 
 ```bash
 # Edit Redis configuration
-sudo nano /etc/redis.conf
+sudo nano /etc/redis6/redis6.conf
 
 # Add or modify these lines:
 bind 127.0.0.1
 requirepass Moulines1
 
 # Save and restart Redis
-sudo systemctl enable redis
-sudo systemctl restart redis
+sudo systemctl enable redis6
+sudo systemctl restart redis6
 
 # Verify Redis is running
-redis-cli -a Moulines1 ping
+redis6-cli -a Moulines1 ping
 # Should return: PONG
 ```
 
@@ -59,7 +59,6 @@ The `.env` file should already exist with the correct password. If not:
 cat > .env <<EOF
 REDIS_PASSWORD=Moulines1
 FLASK_ENV=production
-SECRET_KEY=change-this-to-a-random-secret-key-in-production
 EOF
 ```
 
@@ -107,7 +106,7 @@ This creates a systemd service file that will:
 sudo tee /etc/systemd/system/flask-app.service > /dev/null <<EOF
 [Unit]
 Description=Flask ML Pipeline (Gunicorn)
-After=network.target redis.service
+After=network.target redis6.service
 
 [Service]
 User=ec2-user
@@ -142,7 +141,7 @@ This creates a systemd service file that will:
 sudo tee /etc/systemd/system/celery-worker.service > /dev/null <<EOF
 [Unit]
 Description=Celery Worker (ML Pipeline)
-After=network.target redis.service
+After=network.target redis6.service
 
 [Service]
 User=ec2-user
@@ -254,7 +253,7 @@ In AWS Console, configure Security Group to allow:
 
 2. Test Redis connection:
    ```bash
-   redis-cli -a Moulines1 ping
+   redis6-cli -a Moulines1 ping
    ```
 
 3. Test Celery worker:
@@ -309,13 +308,13 @@ sudo systemctl status flask-app celery-worker
 
 ```bash
 # Check if Redis is running
-sudo systemctl status redis
+sudo systemctl status redis6
 
 # Test Redis connection
-redis-cli -a Moulines1 ping
+redis6-cli -a Moulines1 ping
 
 # Check Redis logs
-sudo journalctl -u redis -f
+sudo journalctl -u redis6 -f
 
 # Check if Redis is listening on localhost
 sudo netstat -tlnp | grep 6379
@@ -346,10 +345,10 @@ python app.py
 sudo journalctl -u celery-worker -n 100 --no-pager
 
 # Check Redis queue length
-redis-cli -a Moulines1 LLEN celery
+redis6-cli -a Moulines1 LLEN celery
 
 # List all Redis keys
-redis-cli -a Moulines1 KEYS '*'
+redis6-cli -a Moulines1 KEYS '*'
 
 # Test manually with debug mode
 cd /home/ec2-user/app
@@ -399,7 +398,7 @@ htop
 df -h
 
 # Check Redis memory usage
-redis-cli -a Moulines1 INFO memory
+redis6-cli -a Moulines1 INFO memory
 ```
 
 ## Security Notes

@@ -46,7 +46,6 @@ def run_pipeline_task(recording_id):
     try:
         update_status(recording_path, "processing", "ML pipeline in progress...")
 
-        # Script is in the app directory
         pipeline_script = os.path.join(BASE_PATH, "app", "simulate_pipeline.sh")
         cmd = f"bash {pipeline_script} {recording_path}"
 

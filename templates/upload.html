@@ -318,10 +318,21 @@
                     const response = await fetch(`/extract_status/${jobId}`);
                     const data = await response.json();
 
-                    if (data.status === 'running') {
+                    if (data.status === 'queued') {
+                        // Show a message while preparing
+                        progressText.textContent = 'Preparing extraction...';
+                    } else if (data.status === 'running') {
                         const percent = data.percent || 0;
                         progressFill.style.width = `${percent}%`;
-                        progressText.textContent = `Extracting: ${data.extracted_files}/${data.total_files} files (${percent.toFixed(1)}%)`;
+                        
+                        // Check if it's simulated progress or real extraction
+                        if (data.simulated) {
+                            // Show simulated progress message
+                            progressText.textContent = data.message || 'Preparing...';
+                        } else {
+                            // Show real extraction progress
+                            progressText.textContent = `Extracting: ${data.extracted_files}/${data.total_files} files (${percent.toFixed(1)}%)`;
+                        }
                     } else if (data.status === 'done') {
                         clearInterval(interval);
                         progressFill.style.width = '100%';

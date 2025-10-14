@@ -4,6 +4,8 @@ import threading
 import uuid
 import shutil
 import time
+import json
+import redis
 from flask import Flask, request, render_template, jsonify, send_file, abort
 from dotenv import load_dotenv
 
@@ -16,6 +18,13 @@ try:
 except ImportError:
     CELERY_AVAILABLE = False
     print("Warning: Celery not available. Pipeline tasks will not be queued.")
+
+# Redis connection for shared state across Gunicorn workers
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+if REDIS_PASSWORD:
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, password=REDIS_PASSWORD, decode_responses=True)
+else:
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 # Configuration - Auto-detect environment (EC2 vs local)
 if os.path.exists("/home/ec2-user"):
@@ -39,7 +48,24 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(EXTRACT_FOLDER, exist_ok=True)
 os.makedirs(TEMP_EXTRACT_FOLDER, exist_ok=True)
 
-extraction_progress = {}
+# Helper functions for Redis-backed extraction progress
+def get_extraction_progress(job_id):
+    """Get extraction progress from Redis"""
+    data = redis_client.get(f"extraction:{job_id}")
+    if data:
+        return json.loads(data)
+    return None
+
+def set_extraction_progress(job_id, progress_dict):
+    """Set extraction progress in Redis with 1 hour expiry"""
+    redis_client.setex(f"extraction:{job_id}", 3600, json.dumps(progress_dict))
+
+def update_extraction_progress(job_id, **kwargs):
+    """Update specific fields in extraction progress"""
+    prog = get_extraction_progress(job_id)
+    if prog:
+        prog.update(kwargs)
+        set_extraction_progress(job_id, prog)
 
 
 def allowed_file(filename):
@@ -211,14 +237,38 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
     4) If valid: move atomically to final_root/<recording_id>/
     5) On error: cleanup everything (ZIP + temp)
     """
-    prog = extraction_progress[job_id]
+    prog = get_extraction_progress(job_id)
+    if not prog:
+        prog = {
+            "status": "error",
+            "error_msg": "Job not found"
+        }
+        set_extraction_progress(job_id, prog)
+        return None
+        
     temp_extract_path = os.path.join(temp_root, job_id)
     zip_top = None
     final_path = None
 
     try:
+        # Step 1: Opening ZIP
+        prog["status"] = "running"
+        prog["message"] = "Opening ZIP archive..."
+        prog["simulated_percent"] = 10
+        set_extraction_progress(job_id, prog)
+        
         with zipfile.ZipFile(zip_path, "r") as z:
+            # Step 2: Reading file list
+            prog["message"] = "Reading file list..."
+            prog["simulated_percent"] = 25
+            set_extraction_progress(job_id, prog)
+            
             members = z.infolist()
+            
+            # Step 3: Filtering files
+            prog["message"] = "Filtering system files..."
+            prog["simulated_percent"] = 40
+            set_extraction_progress(job_id, prog)
             
             # Filter out macOS system files
             members = [m for m in members if not (
@@ -228,10 +278,18 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
                 m.filename.startswith("._")
             )]
             
+            # Step 4: Validating structure
+            prog["message"] = "Validating archive structure..."
+            prog["simulated_percent"] = 55
+            set_extraction_progress(job_id, prog)
+            
             total_files = len(members)
             prog["total_files"] = total_files
             prog["extracted_files"] = 0
-            prog["status"] = "running"
+            prog["message"] = None  # Clear message, now using real progress
+            prog["simulated_percent"] = None
+            # Status already set to "running" above
+            set_extraction_progress(job_id, prog)
 
             # Identify root folder in ZIP
             top_levels = set()
@@ -244,6 +302,7 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
                 prog["status"] = "error"
                 prog["error_msg"] = "Archive must contain exactly one root folder."
                 prog["error_details"] = {"zip_structure": f"Multiple root folders: {', '.join(top_levels)}"}
+                set_extraction_progress(job_id, prog)
                 return
 
             zip_top = top_levels.pop()
@@ -257,10 +316,14 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
                 if not os.path.realpath(dest_path).startswith(os.path.realpath(temp_extract_path) + os.sep):
                     prog["status"] = "error"
                     prog["error_msg"] = "Unsafe file path detected in archive."
+                    set_extraction_progress(job_id, prog)
                     return
 
                 z.extract(member, temp_extract_path)
                 prog["extracted_files"] += 1
+                # Update Redis every 10 files for better performance
+                if prog["extracted_files"] % 10 == 0 or prog["extracted_files"] == total_files:
+                    set_extraction_progress(job_id, prog)
 
         # Collapse duplicate folders
         inner_candidate = os.path.join(temp_extract_path, zip_top)
@@ -280,6 +343,7 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
             prog["status"] = "error"
             prog["error_msg"] = "Invalid archive structure."
             prog["error_details"] = validation_errors
+            set_extraction_progress(job_id, prog)
             return
 
         # Atomic move to final location
@@ -288,6 +352,7 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
         if os.path.exists(final_path):
             prog["status"] = "error"
             prog["error_msg"] = f"Recording with ID '{zip_top}' already exists."
+            set_extraction_progress(job_id, prog)
             return
 
         shutil.move(temp_extract_path, final_path)
@@ -300,16 +365,19 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
         prog["extract_size"] = size_bytes
         prog["recording_id"] = zip_top
         prog["status"] = "done"
+        set_extraction_progress(job_id, prog)
         
         return zip_top
 
     except zipfile.BadZipFile:
         prog["status"] = "error"
         prog["error_msg"] = "Uploaded file is not a valid ZIP archive."
+        set_extraction_progress(job_id, prog)
 
     except Exception as e:
         prog["status"] = "error"
         prog["error_msg"] = f"Error during extraction: {str(e)}"
+        set_extraction_progress(job_id, prog)
 
     finally:
         # Cleanup on error
@@ -353,15 +421,19 @@ def upload_recording():
     except Exception as e:
         return jsonify({"error": f"Save failed: {str(e)}"}), 500
 
-    extraction_progress[job_id] = {
+    # Initialize extraction progress in Redis
+    initial_progress = {
         "status": "queued",
         "total_files": 0,
         "extracted_files": 0,
         "extract_size": None,
         "recording_id": None,
         "error_msg": None,
-        "error_details": None
+        "error_details": None,
+        "message": None,  # For simulated progress messages
+        "simulated_percent": None  # For simulated progress percentage
     }
+    set_extraction_progress(job_id, initial_progress)
 
     def extract_and_queue_pipeline():
         """Extracts ZIP then adds pipeline task to Celery queue"""
@@ -388,21 +460,34 @@ def upload_recording():
 
 @app.route("/extract_status/<job_id>", methods=["GET"])
 def extract_status(job_id):
-    if job_id not in extraction_progress:
+    prog = get_extraction_progress(job_id)
+    
+    if not prog:
         return jsonify({"error": "Unknown job_id"}), 404
 
-    prog = extraction_progress[job_id]
     status = prog["status"]
 
     if status == "running":
         total = prog["total_files"]
         done = prog["extracted_files"]
+        
+        # Check if we're in simulated progress mode (before actual extraction)
+        if prog.get("simulated_percent") is not None:
+            return jsonify({
+                "status": "running",
+                "percent": prog["simulated_percent"],
+                "message": prog.get("message", "Preparing..."),
+                "simulated": True
+            }), 200
+        
+        # Real extraction progress
         percent = (done / total) * 100 if total > 0 else 0
         return jsonify({
             "status": "running",
             "total_files": total,
             "extracted_files": done,
-            "percent": percent
+            "percent": percent,
+            "simulated": False
         }), 200
 
     if status == "done":
