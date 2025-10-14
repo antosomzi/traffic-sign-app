@@ -396,10 +396,11 @@ def upload_recording():
     filename = f"{job_id}_{file.filename}"
     save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
+    # Read file content into memory before thread starts (Flask closes file after request)
     try:
-        file.save(save_path)
+        file_content = file.read()
     except Exception as e:
-        return jsonify({"error": f"Save failed: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
 
     # Initialize extraction progress in Redis
     initial_progress = {
@@ -413,8 +414,23 @@ def upload_recording():
     }
     set_extraction_progress(job_id, initial_progress)
 
-    def extract_and_queue_pipeline():
-        """Extracts ZIP then adds pipeline task to Celery queue"""
+    def save_and_extract():
+        """Saves file, extracts ZIP, then adds pipeline task to Celery queue"""
+        prog = get_extraction_progress(job_id)
+        if not prog:
+            return
+            
+        try:
+            # Write file content to disk
+            with open(save_path, 'wb') as f:
+                f.write(file_content)
+        except Exception as e:
+            prog["status"] = "error"
+            prog["error_msg"] = f"Save failed: {str(e)}"
+            set_extraction_progress(job_id, prog)
+            return
+        
+        # Extract archive
         recording_id = extract_archive(
             job_id, 
             save_path, 
@@ -422,6 +438,7 @@ def upload_recording():
             app.config["EXTRACT_FOLDER"]
         )
         
+        # Queue pipeline task if extraction succeeded
         if recording_id and CELERY_AVAILABLE:
             time.sleep(0.5)
             try:
@@ -430,8 +447,8 @@ def upload_recording():
             except Exception as e:
                 print(f"⚠️ Could not queue pipeline task: {e}")
 
-    # Start extraction in background thread
-    thread = threading.Thread(target=extract_and_queue_pipeline, daemon=True)
+    # Start save + extraction in background thread
+    thread = threading.Thread(target=save_and_extract, daemon=True)
     thread.start()
 
     return jsonify({"job_id": job_id}), 200
