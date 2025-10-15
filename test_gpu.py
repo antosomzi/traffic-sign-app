@@ -4,13 +4,14 @@
 import os
 from tasks import run_pipeline_task
 
-# Set to true to test GPU instance launch
+# Set to true to test GPU instance start/stop
 os.environ['USE_GPU_INSTANCE'] = 'true'
 
 # Use an existing recording ID from your recordings folder
 recording_id = "2024_05_20_23_32_53_415"
 
-print(f"🧪 Testing GPU pipeline for recording: {recording_id}")
+print(f"🧪 Testing GPU pipeline (START existing instance)")
+print(f"   Recording: {recording_id}")
 print(f"   GPU mode: {os.getenv('USE_GPU_INSTANCE')}")
 print("-" * 60)
 

@@ -3,7 +3,7 @@ import subprocess
 import os
 import time
 import json
-from ec2_gpu_manager import launch_and_run_pipeline_ssh
+from ec2_gpu_manager import start_and_run_pipeline_ssh
 
 # Configuration - Auto-detect environment (EC2 vs local)
 if os.path.exists("/home/ec2-user"):
@@ -66,8 +66,8 @@ def run_pipeline_gpu(recording_id, recording_path):
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
     update_status(recording_path, "processing", "Launching GPU instance via SSH...")
     
-    # Launch GPU instance and execute pipeline via SSH
-    success, instance_id, message = launch_and_run_pipeline_ssh(recording_id)
+    # Start existing GPU instance and execute pipeline via SSH
+    success, instance_id, message = start_and_run_pipeline_ssh(recording_id)
     
     if not success:
         update_status(recording_path, "error", f"GPU pipeline failed: {message}")

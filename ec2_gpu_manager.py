@@ -1,56 +1,40 @@
-"""GPU Instance Manager - Launch, SSH connect, run pipeline, stop"""
+"""GPU Instance Manager - Start existing GPU instance, run pipeline, stop"""
 
 import boto3
 import paramiko
 import time
 import os
 from gpu_config import (
-    AWS_REGION, GPU_AMI_ID, GPU_INSTANCE_TYPE, KEY_NAME,
-    SUBNET_ID, SECURITY_GROUP_IDS, EFS_DNS, EFS_MOUNT_POINT,
-    get_instance_tags
+    AWS_REGION, GPU_INSTANCE_ID, KEY_NAME,
+    EFS_DNS, EFS_MOUNT_POINT
 )
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 
 
-def launch_and_run_pipeline_ssh(recording_id):
-    """Launch GPU instance, run pipeline via SSH, stop instance."""
+def start_and_run_pipeline_ssh(recording_id):
+    """Start existing GPU instance, run pipeline via SSH, stop instance."""
     
     ec2 = boto3.client('ec2', region_name=AWS_REGION)
-    instance_id = None
     ssh = None
     
     try:
-        print(f"[GPU] Launching instance for {recording_id}...")
-        response = ec2.run_instances(
-            ImageId=GPU_AMI_ID,
-            InstanceType=GPU_INSTANCE_TYPE,
-            KeyName=KEY_NAME,
-            MinCount=1,
-            MaxCount=1,
-            SubnetId=SUBNET_ID,
-            SecurityGroupIds=SECURITY_GROUP_IDS,
-            TagSpecifications=get_instance_tags(recording_id),
-            BlockDeviceMappings=[{
-                'DeviceName': '/dev/xvda',
-                'Ebs': {'VolumeSize': 100, 'VolumeType': 'gp3', 'DeleteOnTermination': True}
-            }]
-        )
-        instance_id = response['Instances'][0]['InstanceId']
-        print(f"✅ Instance launched: {instance_id}")
+        print(f"[GPU] Starting existing instance {GPU_INSTANCE_ID}...")
+        ec2.start_instances(InstanceIds=[GPU_INSTANCE_ID])
+        print(f"✅ Instance start initiated")
         
-        print("[GPU] Waiting for instance to start...")
+        print("[GPU] Waiting for instance to be running...")
         waiter = ec2.get_waiter('instance_running')
-        waiter.wait(InstanceIds=[instance_id])
+        waiter.wait(InstanceIds=[GPU_INSTANCE_ID])
         
-        response = ec2.describe_instances(InstanceIds=[instance_id])
+        response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
         public_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
         print(f"✅ Instance running: {public_ip}")
         
-        print("[GPU] Waiting for SSH ready...")
+        print("[GPU] Waiting for SSH to be ready (60s)...")
         time.sleep(60)
         
-        print("[GPU] Connecting SSH...")
+        print("[GPU] Connecting via SSH...")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(
@@ -104,11 +88,11 @@ def launch_and_run_pipeline_ssh(recording_id):
         ssh.close()
         print("✅ SSH closed")
         
-        print(f"[GPU] Stopping instance {instance_id}...")
-        ec2.stop_instances(InstanceIds=[instance_id])
+        print(f"[GPU] Stopping instance {GPU_INSTANCE_ID}...")
+        ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
         print("✅ Instance stopped")
         
-        return True, instance_id, "Pipeline completed successfully"
+        return True, GPU_INSTANCE_ID, "Pipeline completed successfully"
         
     except Exception as e:
         error_msg = str(e)
@@ -120,12 +104,11 @@ def launch_and_run_pipeline_ssh(recording_id):
             except:
                 pass
         
-        if instance_id:
-            try:
-                print(f"[GPU] Terminating instance {instance_id} after error...")
-                ec2.terminate_instances(InstanceIds=[instance_id])
-            except:
-                pass
+        try:
+            print(f"[GPU] Stopping instance {GPU_INSTANCE_ID} after error...")
+            ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
+        except:
+            pass
         
-        return False, instance_id, error_msg
+        return False, GPU_INSTANCE_ID, error_msg
 

@@ -4,7 +4,8 @@ import os
 
 AWS_REGION = "us-east-2"
 
-# GPU Instance
+# GPU Instance - EXISTING instance (stopped by default)
+GPU_INSTANCE_ID = "i-08996fef0c0b5187f"
 GPU_AMI_ID = "ami-0d67eb9a9a933bd88"
 GPU_INSTANCE_TYPE = "g6e.xlarge"
 KEY_NAME = "traffic-sign-inventory_keypair"
