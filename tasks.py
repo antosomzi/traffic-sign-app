@@ -64,7 +64,7 @@ def run_pipeline_local(recording_id, recording_path):
 def run_pipeline_gpu(recording_id, recording_path):
     """Run pipeline on a dedicated GPU instance via SSH."""
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
-    update_status(recording_path, "processing", "Launching GPU instance via SSH...")
+    update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
     
     # Start existing GPU instance and execute pipeline via SSH
     success, instance_id, message = start_and_run_pipeline_ssh(recording_id)

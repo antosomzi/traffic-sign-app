@@ -19,9 +19,25 @@ def start_and_run_pipeline_ssh(recording_id):
     ssh = None
     
     try:
-        print(f"[GPU] Starting existing instance {GPU_INSTANCE_ID}...")
-        ec2.start_instances(InstanceIds=[GPU_INSTANCE_ID])
-        print(f"✅ Instance start initiated")
+        print(f"[GPU] Checking instance {GPU_INSTANCE_ID} state...")
+        response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
+        current_state = response['Reservations'][0]['Instances'][0]['State']['Name']
+        print(f"   Current state: {current_state}")
+        
+        if current_state == 'stopping':
+            print("   Instance is stopping, waiting for it to stop (2-3 min)...")
+            waiter = ec2.get_waiter('instance_stopped')
+            waiter.wait(InstanceIds=[GPU_INSTANCE_ID])
+            print("   ✅ Instance stopped")
+        elif current_state == 'running':
+            print("   Instance already running, skipping start")
+        elif current_state != 'stopped':
+            raise Exception(f"Instance is in unexpected state: {current_state}")
+        
+        if current_state in ['stopped', 'stopping']:
+            print(f"[GPU] Starting instance {GPU_INSTANCE_ID}...")
+            ec2.start_instances(InstanceIds=[GPU_INSTANCE_ID])
+            print(f"✅ Instance start initiated")
         
         print("[GPU] Waiting for instance to be running...")
         waiter = ec2.get_waiter('instance_running')
