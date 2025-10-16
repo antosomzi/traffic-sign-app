@@ -7,50 +7,12 @@ Web application for uploading, validating, and asynchronously processing traffic
 - [Architecture](#-architecture)
 - [Features](#-features)
 - [Project Structure](#-project-structure)
-- [Installation## 🛠️ Technology Stack
-
-- **Backend**: Flask 3.0, Gunicorn 21.2
-- **Task Queue**: Celery 5.3, Redis 5.0
-- **AWS**: boto3 1.34 (EC2, EFS)
-- **SSH**: paramiko 3.3
-- **Frontend**: Vanilla JavaScript (no framework)
-- **UI Design**: Modern flat design with blue accent (#3b82f6)
-
-## 📚 Additional Documentation
-
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete EC2 deployment guide with systemd configuration
-- **[EC2_GPU_CONFIG.md](EC2_GPU_CONFIG.md)** - GPU instance setup and network configuration
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - AI agent development guidelines
-
-## 💡 Key Design Decisions
-
-- **Redis for state sharing**: Solves multi-worker Gunicorn state synchronization
-- **Atomic operations**: Extract → validate → move prevents partial uploads
-- **Auto-cleanup**: Removes macOS artifacts automatically
-- **Dual execution modes**: Flexibility between local and GPU processing
-- **Real-time progress**: 300ms polling for smooth user experience
-- **Status persistence**: `status.json` in each recording folder
-
-## 🤝 Contributing
-
-Contributions are welcome! Please ensure:
-- Code follows existing patterns
-- Changes are tested locally with 3-terminal setup
-- Documentation is updated accordingly
-
-## 📄 License
-
-This project is part of the GRA traffic sign inventory system.
-
----
-
-**Questions?** Refer to `DEPLOYMENT.md` for production setup or `.github/copilot-instructions.md` for development guidelines.allation)
+- [Installation](#-installation)
 - [Usage](#-usage)
 - [Expected Data Structure](#-expected-data-structure)
-- [ML Pipeline Stages](#-ml-pipeline-stages)
 - [Configuration](#-configuration)
-- [Deployment](#-deployment)
 - [Security](#-security)
+- [Technology Stack](#-technology-stack)
 
 ## 🏗️ Architecture
 
@@ -81,7 +43,7 @@ Toggle via `USE_GPU_INSTANCE` environment variable:
 - **Local mode** (default): Runs pipeline on the same instance
 - **GPU mode**: Launches AWS EC2 GPU instance, executes via SSH, auto-stops after completion
 
-See `DEPLOYMENT.md` and `EC2_GPU_CONFIG.md` for GPU configuration details.
+For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ## ✨ Features
 
@@ -205,60 +167,30 @@ Access the application at: **http://localhost:5000**
 
 ## 🗂️ Expected Data Structure
 
-```
-## 🗂️ Expected Data Structure
-
-Strict validation enforces the following hierarchy:
+The uploaded ZIP must contain exactly one root folder with the following structure:
 
 ```
-<recording_id>/
-└── <device_id>/
-    └── <imei_folder>/
-        ├── acceleration/
-        │   └── <recording_id>_acc.csv
-        ├── calibration/
-        │   └── *_calibration.csv (at least 1 file)
-        ├── camera/
-        │   ├── <recording_id>_cam_<recording_id>.mp4
-        │   └── camera_params.csv
-        ├── location/
-        │   ├── <recording_id>_loc.csv
-        │   └── <recording_id>_loc_cleaned.csv
-        └── processed/
-            ├── <recording_id>_processed_acc.csv
-            └── <recording_id>_processed_loc.csv
+recording_id/
+  └── device_id/
+      └── imei_folder/
+          ├── acceleration/
+          │     └── recording_id_acc.csv
+          ├── calibration/
+          │     └── *_calibration.csv (at least 1 file)
+          ├── camera/
+          │     ├── recording_id_cam_recording_id.mp4
+          │     └── camera_params.csv
+          ├── location/
+          │     ├── recording_id_loc.csv
+          │     └── recording_id_loc_cleaned.csv
+          └── processed/
+                ├── recording_id_processed_acc.csv
+                └── recording_id_processed_loc.csv
 ```
 
-**Note**: macOS system files (`__MACOSX/`, `.DS_Store`, `._*`) are automatically removed during extraction.
-
-## 📊 ML Pipeline Stages
-
-8-stage processing pipeline:
-
-1. **s0_detection** - Initial object detection
-2. **s1_small_sign_filter** - Filter small signs
-3. **s2_tracking** - Object tracking across frames
-4. **s3_small_track_filter** - Filter short tracks
-5. **s4_classification** - Sign classification
-6. **s5_frames_gps_coordinates_extraction** - GPS extraction
-7. **s6_localization** - Precise localization
-8. **s7_export_csv** - Final CSV export
-
-**Pipeline duration**: ~40 seconds (simulation), varies with real ML models.
-```
-
-## 📊 Pipeline de traitement
-
-La pipeline comporte 8 étapes :
-
-1. **s0_detection** - Détection initiale
-2. **s1_small_sign_filter** - Filtrage des petits panneaux
-3. **s2_tracking** - Suivi des objets
-4. **s3_small_track_filter** - Filtrage des petites trajectoires
-5. **s4_classification** - Classification des panneaux
-6. **s5_frames_gps_coordinates_extraction** - Extraction des coordonnées GPS
-7. **s6_localization** - Localisation
-8. **s7_export_csv** - Export CSV final
+**Notes:**
+- macOS system files (`__MACOSX/`, `.DS_Store`, `._*`) are automatically removed
+- Structure validation is strict - all folders and files must be present
 
 ## ⚙️ Configuration
 
@@ -277,58 +209,7 @@ USE_GPU_INSTANCE=false
 FLASK_ENV=production
 ```
 
-### Redis Storage
-
-Extraction progress is stored in Redis with the following format:
-
-**Key**: `extraction:<job_id>`
-
-**Value (JSON)**:
-```json
-{
-  "status": "running",
-  "total_files": 250,
-  "extracted_files": 120,
-  "extract_size": null,
-  "recording_id": null,
-  "error_msg": null,
-  "error_details": null
-}
-```
-
 **TTL**: 1 hour (auto-cleanup)
-
-### Path Detection
-
-The application auto-detects the environment:
-- **EC2**: Uses `/home/ec2-user` if the directory exists
-- **Local**: Uses script directory
-
-## � Deployment
-
-### Production (systemd services)
-
-1. Install system dependencies:
-```bash
-sudo dnf update -y
-sudo dnf install -y python3 python3-pip redis6 git
-```
-
-2. Configure Redis with password (see `DEPLOYMENT.md`)
-
-3. Create systemd services:
-   - `flask-app.service` - Gunicorn with 4 workers
-   - `celery-worker.service` - Background task processing
-
-4. Enable and start services:
-```bash
-sudo systemctl enable flask-app celery-worker
-sudo systemctl start flask-app celery-worker
-```
-
-For detailed deployment instructions, see **`DEPLOYMENT.md`**.
-
-For GPU instance configuration, see **`EC2_GPU_CONFIG.md`**.
 
 ## � Security
 
