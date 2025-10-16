@@ -19,7 +19,7 @@
 
 Toggle with environment variable `USE_GPU_INSTANCE`:
 - **false** (default): Runs pipeline locally via `simulate_pipeline.sh`
-- **true**: Launches AWS EC2 GPU instance (`ec2_gpu_manager.py`), executes via SSH, auto-stops instance after completion
+- **true**: Launches AWS EC2 GPU instance (`gpu_pipeline_runner.py`), executes via SSH, auto-stops instance after completion
 
 GPU mode architecture:
 - Main EC2 instance (t3.large) manages lifecycle
@@ -82,7 +82,7 @@ python app.py  # Dev mode (single worker, auto-reload)
 1. **Missing Redis password**: Production requires `REDIS_PASSWORD` in `.env` AND Redis config (`/etc/redis6/redis6.conf`)
 2. **GPU SSH key**: Must exist at `/home/ec2-user/traffic-sign-inventory_keypair.pem` with correct permissions (400)
 3. **IAM role requirement**: Main EC2 instance needs `AmazonEC2FullAccess` to start/stop GPU instance
-4. **EFS mount**: GPU instance must mount EFS before pipeline execution (`mount_cmd` in `ec2_gpu_manager.py`)
+4. **EFS mount**: GPU instance must mount EFS before pipeline execution (`mount_cmd` in `gpu_pipeline_runner.py`)
 5. **Gunicorn timeouts**: Set `--timeout 300` for large uploads (8GB max, configured in `MAX_CONTENT_LENGTH`)
 
 ## External Dependencies

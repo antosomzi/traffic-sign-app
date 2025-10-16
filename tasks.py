@@ -3,7 +3,7 @@ import subprocess
 import os
 import time
 import json
-from ec2_gpu_manager import start_and_run_pipeline_ssh
+from gpu_pipeline_runner import start_and_run_pipeline_ssh
 
 # Configuration - Auto-detect environment (EC2 vs local)
 if os.path.exists("/home/ec2-user"):

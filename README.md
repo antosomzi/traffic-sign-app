@@ -63,7 +63,7 @@ app/
 ├── app.py                      # Flask application & routes
 ├── celery_app.py               # Celery configuration
 ├── tasks.py                    # Async pipeline tasks
-├── ec2_gpu_manager.py          # GPU instance orchestration
+├── gpu_pipeline_runner.py      # GPU instance pipeline execution
 ├── gpu_config.py               # AWS GPU configuration
 ├── simulate_pipeline.sh        # Pipeline simulation script
 ├── start_gunicorn.sh           # Production server startup
