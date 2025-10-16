@@ -13,7 +13,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -24,7 +24,7 @@
         .container {
             background: white;
             border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             padding: 40px;
             max-width: 600px;
             width: 100%;
@@ -44,23 +44,23 @@
         }
 
         .upload-area {
-            border: 2px dashed #667eea;
+            border: 2px dashed #cbd5e1;
             border-radius: 8px;
             padding: 40px;
             text-align: center;
-            background: #f8f9ff;
-            transition: all 0.3s ease;
+            background: #f8fafc;
+            transition: all 0.2s ease;
             cursor: pointer;
         }
 
         .upload-area:hover {
-            border-color: #764ba2;
-            background: #f0f2ff;
+            border-color: #3b82f6;
+            background: #f8fafc;
         }
 
         .upload-area.dragover {
-            border-color: #764ba2;
-            background: #e8eaff;
+            border-color: #3b82f6;
+            background: #eff6ff;
         }
 
         .upload-icon {
@@ -73,7 +73,7 @@
         }
 
         .file-label {
-            color: #667eea;
+            color: #3b82f6;
             font-weight: 600;
             font-size: 16px;
             margin-bottom: 10px;
@@ -97,7 +97,7 @@
         }
 
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #3b82f6;
             color: white;
             border: none;
             padding: 14px 32px;
@@ -107,13 +107,12 @@
             cursor: pointer;
             width: 100%;
             margin-top: 20px;
-            transition: transform 0.2s ease;
+            transition: background-color 0.2s ease;
             display: none;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            background: #2563eb;
         }
 
         .btn:disabled {
@@ -138,7 +137,7 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            background: #3b82f6;
             width: 0%;
             transition: width 0.3s ease;
         }
@@ -181,7 +180,7 @@
         .nav-link {
             display: inline-block;
             margin-top: 20px;
-            color: #667eea;
+            color: #3b82f6;
             text-decoration: none;
             font-weight: 600;
         }
@@ -338,11 +337,12 @@
                         successMsg += `<strong>Size:</strong> ${data.extract_size}<br>`;
                         successMsg += `<strong>Status:</strong> ${data.message || 'Awaiting processing'}`;
                         
-                        showMessage('success', successMsg);
                         uploadBtn.disabled = false;
                         
+                        // Hide progress bar first, then show success message
                         setTimeout(() => {
                             progressContainer.style.display = 'none';
+                            showMessage('success', successMsg);
                         }, 2000);
                     } else if (data.status === 'error') {
                         clearInterval(interval);
