@@ -1,146 +1,214 @@
-# Application Flask + Celery + Redis - Pipeline ML
+# Traffic Sign ML Pipeline
 
-Web application for uploading, validating, and asynchronously processing recordings through an ML pipeline.
+Web application for uploading, validating, and asynchronously processing traffic sign recordings through a machine learning pipeline.
+
+## 📑 Table of Contents
+
+- [Architecture](#-architecture)
+- [Features](#-features)
+- [Project Structure](#-project-structure)
+- [Installation## 🛠️ Technology Stack
+
+- **Backend**: Flask 3.0, Gunicorn 21.2
+- **Task Queue**: Celery 5.3, Redis 5.0
+- **AWS**: boto3 1.34 (EC2, EFS)
+- **SSH**: paramiko 3.3
+- **Frontend**: Vanilla JavaScript (no framework)
+- **UI Design**: Modern flat design with blue accent (#3b82f6)
+
+## 📚 Additional Documentation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete EC2 deployment guide with systemd configuration
+- **[EC2_GPU_CONFIG.md](EC2_GPU_CONFIG.md)** - GPU instance setup and network configuration
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - AI agent development guidelines
+
+## 💡 Key Design Decisions
+
+- **Redis for state sharing**: Solves multi-worker Gunicorn state synchronization
+- **Atomic operations**: Extract → validate → move prevents partial uploads
+- **Auto-cleanup**: Removes macOS artifacts automatically
+- **Dual execution modes**: Flexibility between local and GPU processing
+- **Real-time progress**: 300ms polling for smooth user experience
+- **Status persistence**: `status.json` in each recording folder
+
+## 🤝 Contributing
+
+Contributions are welcome! Please ensure:
+- Code follows existing patterns
+- Changes are tested locally with 3-terminal setup
+- Documentation is updated accordingly
+
+## 📄 License
+
+This project is part of the GRA traffic sign inventory system.
+
+---
+
+**Questions?** Refer to `DEPLOYMENT.md` for production setup or `.github/copilot-instructions.md` for development guidelines.allation)
+- [Usage](#-usage)
+- [Expected Data Structure](#-expected-data-structure)
+- [ML Pipeline Stages](#-ml-pipeline-stages)
+- [Configuration](#-configuration)
+- [Deployment](#-deployment)
+- [Security](#-security)
 
 ## 🏗️ Architecture
 
-- **Flask**: Web interface, upload, extraction and validation of ZIP archives
+**3-Tier Asynchronous Processing System:**
+
+- **Flask**: Web interface for file upload, validation, and result delivery
 - **Redis**: 
   - Message broker for Celery task queue
-  - Shared state storage for extraction progress (across Gunicorn workers)
+  - Shared state storage for extraction progress (critical for multi-worker Gunicorn)
 - **Celery**: Asynchronous worker for ML pipeline processing
 - **Gunicorn**: Production WSGI server with 4 worker processes
-- **Shared filesystem**: Storage for uploads and results
 
 ### Multi-Worker Architecture
 
-The application uses **Gunicorn with 4 workers** for production. Since each worker has its own memory space, Redis is used to share the extraction progress state between workers:
+Production uses **Gunicorn with 4 workers**. Since each worker has separate memory, Redis ensures extraction progress is shared across all workers:
 
 ```
-Request 1 (Upload) → Worker #1 → Creates extraction progress in Redis
-Request 2 (Status) → Worker #3 → Reads extraction progress from Redis ✅
-Request 3 (Status) → Worker #2 → Reads extraction progress from Redis ✅
+Request 1 (Upload) → Worker #1 → Stores progress in Redis
+Request 2 (Status) → Worker #3 → Reads progress from Redis ✅
+Request 3 (Status) → Worker #2 → Reads progress from Redis ✅
 ```
 
-Without Redis, each worker would have its own `extraction_progress = {}` dictionary, causing 404 errors when different workers handle the status requests.
+Without Redis, status checks would return 404 when handled by different workers.
+
+### Execution Modes
+
+Toggle via `USE_GPU_INSTANCE` environment variable:
+- **Local mode** (default): Runs pipeline on the same instance
+- **GPU mode**: Launches AWS EC2 GPU instance, executes via SSH, auto-stops after completion
+
+See `DEPLOYMENT.md` and `EC2_GPU_CONFIG.md` for GPU configuration details.
+
+## ✨ Features
+
+- **Drag-and-drop file upload** with real-time progress tracking
+- **Strict validation** of recording structure before processing
+- **Asynchronous processing** with status monitoring
+- **Automatic cleanup** of macOS system files (`__MACOSX/`, `.DS_Store`)
+- **Atomic operations** (extract → validate → move)
+- **Multi-worker safe** progress tracking via Redis
+- **GPU instance orchestration** for compute-intensive ML tasks
+- **Downloadable results** (CSV exports of detected traffic signs)
 
 ## 📁 Project Structure
 
 ```
 app/
-├── app.py                      # Main Flask application
+├── app.py                      # Flask application & routes
 ├── celery_app.py               # Celery configuration
-├── tasks.py                    # Asynchronous tasks
+├── tasks.py                    # Async pipeline tasks
+├── ec2_gpu_manager.py          # GPU instance orchestration
+├── gpu_config.py               # AWS GPU configuration
 ├── simulate_pipeline.sh        # Pipeline simulation script
+├── start_gunicorn.sh           # Production server startup
 ├── requirements.txt            # Python dependencies
-├── .env                        # Environment variables (not in git)
-├── DEPLOYMENT.md               # Deployment guide for EC2
+├── .env                        # Environment variables
+├── DEPLOYMENT.md               # EC2 deployment guide
+├── EC2_GPU_CONFIG.md           # GPU instance setup
 ├── templates/
 │   ├── upload.html            # Upload interface
-│   └── status.html            # Status tracking
-└── README.md                  # This file
+│   └── status.html            # Status monitoring
+├── recordings/                 # Validated recordings
+├── uploads/                    # Uploaded files
+└── temp_extracts/             # Temporary extraction folder
 ```
 
-## 🚀 Local Installation
+## 🚀 Installation
 
-### 1. Clone the repository
+### Prerequisites
 
+- Python 3.11+
+- Redis 6+
+- Git
+
+### Local Setup
+
+**1. Clone the repository**
 ```bash
-git clone <your-repo-url>
+git clone <repository-url>
 cd app
 ```
 
-### 2. Create virtual environment
-
+**2. Create virtual environment**
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 ```
 
-### 3. Install Python dependencies
-
+**3. Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Install and start Redis
+**4. Install and start Redis**
 
-**On macOS (with Homebrew):**
+macOS (Homebrew):
 ```bash
 brew install redis
 redis-server
 ```
 
-**On Ubuntu/Debian:**
+Ubuntu/Debian:
 ```bash
 sudo apt-get install redis-server
 sudo systemctl start redis
 ```
 
-**On Windows:**
-- Download Redis from https://redis.io/download
-- Or use WSL2
-
-### 5. Configure environment variables (optional for local dev)
-
+**5. Make scripts executable**
 ```bash
-# Create .env file (already exists with defaults)
-cp .env.example .env  # If you want to customize
+chmod +x simulate_pipeline.sh start_gunicorn.sh
 ```
 
-For local development, you can run without password. For production, see `DEPLOYMENT.md`.
+### Running Locally (Development)
 
-### 6. Make the simulation script executable
+Open **3 terminals**:
 
 ```bash
-chmod +x simulate_pipeline.sh
-```
-
-## 🎯 Démarrage
-
-Ouvrez **3 terminaux** et exécutez les commandes suivantes :
-
-### Terminal 1 - Redis
-```bash
+# Terminal 1 - Redis
 redis-server
-```
 
-### Terminal 2 - Celery Worker
-```bash
+# Terminal 2 - Celery Worker
 celery -A tasks worker --loglevel=INFO
-```
 
-### Terminal 3 - Flask App
-```bash
+# Terminal 3 - Flask App
 python app.py
 ```
 
-L'application sera accessible sur : **http://localhost:5000**
+Access the application at: **http://localhost:5000**
 
-## 📝 Utilisation
+## 📝 Usage
 
-### 1. Upload d'un enregistrement
+### 1. Upload Recording
 
-1. Accédez à `http://localhost:5000`
-2. Glissez-déposez ou sélectionnez un fichier ZIP
-3. Cliquez sur "Télécharger et valider"
-4. L'application va :
-   - Extraire le ZIP
-   - Valider la structure
-   - Ajouter une tâche Celery si valide
+1. Navigate to `http://localhost:5000`
+2. Drag-and-drop or select a ZIP file
+3. Click "Upload and Validate"
+4. The system will:
+   - Extract the archive
+   - Validate the folder structure
+   - Queue a Celery task if valid
 
-### 2. Suivi des traitements
+### 2. Monitor Processing
 
-- Cliquez sur "Voir les statuts des enregistrements"
-- Vous verrez tous les enregistrements avec leur statut
-- La page se rafraîchit automatiquement toutes les 10 secondes
+- Click "View Recording Status"
+- Track all recordings and their pipeline progress
+- Page auto-refreshes every 10 seconds
 
-### 3. Téléchargement des résultats
+### 3. Download Results
 
-- Une fois le traitement terminé, un bouton "Télécharger les résultats" apparaît
-- Le téléchargement contient les fichiers `supports.csv` et `signs.csv`
+- Once processing is complete, click "Download Results"
+- Downloads a ZIP containing `supports.csv` and `signs.csv`
 
-## 🗂️ Structure de données attendue
+## 🗂️ Expected Data Structure
+
+```
+## 🗂️ Expected Data Structure
+
+Strict validation enforces the following hierarchy:
 
 ```
 <recording_id>/
@@ -149,7 +217,7 @@ L'application sera accessible sur : **http://localhost:5000**
         ├── acceleration/
         │   └── <recording_id>_acc.csv
         ├── calibration/
-        │   └── *_calibration.csv (au moins 1)
+        │   └── *_calibration.csv (at least 1 file)
         ├── camera/
         │   ├── <recording_id>_cam_<recording_id>.mp4
         │   └── camera_params.csv
@@ -159,6 +227,24 @@ L'application sera accessible sur : **http://localhost:5000**
         └── processed/
             ├── <recording_id>_processed_acc.csv
             └── <recording_id>_processed_loc.csv
+```
+
+**Note**: macOS system files (`__MACOSX/`, `.DS_Store`, `._*`) are automatically removed during extraction.
+
+## 📊 ML Pipeline Stages
+
+8-stage processing pipeline:
+
+1. **s0_detection** - Initial object detection
+2. **s1_small_sign_filter** - Filter small signs
+3. **s2_tracking** - Object tracking across frames
+4. **s3_small_track_filter** - Filter short tracks
+5. **s4_classification** - Sign classification
+6. **s5_frames_gps_coordinates_extraction** - GPS extraction
+7. **s6_localization** - Precise localization
+8. **s7_export_csv** - Final CSV export
+
+**Pipeline duration**: ~40 seconds (simulation), varies with real ML models.
 ```
 
 ## 📊 Pipeline de traitement
@@ -174,152 +260,90 @@ La pipeline comporte 8 étapes :
 7. **s6_localization** - Localisation
 8. **s7_export_csv** - Export CSV final
 
-## 🔧 Configuration
+## ⚙️ Configuration
 
-### Redis for Extraction Progress
+### Environment Variables
 
-Redis stores extraction progress as JSON strings with the following structure:
+Create a `.env` file (optional for local development):
 
-**Redis Key Format:**
+```bash
+# Redis password (required for production)
+REDIS_PASSWORD=your_password_here
+
+# Execution mode (local or GPU instance)
+USE_GPU_INSTANCE=false
+
+# Flask environment
+FLASK_ENV=production
 ```
-extraction:<job_id>
-```
 
-**Value (JSON):**
+### Redis Storage
+
+Extraction progress is stored in Redis with the following format:
+
+**Key**: `extraction:<job_id>`
+
+**Value (JSON)**:
 ```json
 {
-  "status": "running",           // "queued", "running", "done", "error"
-  "total_files": 250,             // Total files in ZIP
-  "extracted_files": 120,         // Files extracted so far
-  "extract_size": 1024000,        // Final size in bytes (null until done)
-  "recording_id": "2024_05_...",  // Recording ID (null until done)
-  "error_msg": null,              // Error message if status="error"
-  "error_details": null           // Detailed error info (dict)
+  "status": "running",
+  "total_files": 250,
+  "extracted_files": 120,
+  "extract_size": null,
+  "recording_id": null,
+  "error_msg": null,
+  "error_details": null
 }
 ```
 
-**TTL (Time To Live):** 1 hour (3600 seconds) - Redis automatically deletes old entries
+**TTL**: 1 hour (auto-cleanup)
 
-**Update Frequency:** Progress is updated every 10 files during extraction to optimize performance.
+### Path Detection
 
-### Helper Functions
+The application auto-detects the environment:
+- **EC2**: Uses `/home/ec2-user` if the directory exists
+- **Local**: Uses script directory
 
-```python
-# Read from Redis (JSON string → Python dict)
-prog = get_extraction_progress(job_id)
+## � Deployment
 
-# Write to Redis (Python dict → JSON string)
-set_extraction_progress(job_id, progress_dict)
+### Production (systemd services)
 
-# Modify in Python (standard dict operations)
-prog["status"] = "running"
-prog["extracted_files"] += 1
-```
-
-### File Paths
-
-Les chemins par défaut sont configurés pour EC2 dans `/home/ec2-user/`:
-
-- `uploads/` - Fichiers uploadés
-- `temp_extracts/` - Extraction temporaire
-- `recordings/` - Enregistrements validés
-
-Pour modifier, éditez les constantes dans `app.py` et `tasks.py`.
-
-## 🐛 Dépannage
-
-### Redis ne démarre pas
+1. Install system dependencies:
 ```bash
-# Vérifier si Redis tourne
-redis-cli ping
-# Devrait retourner "PONG"
-
-# Sur EC2 avec mot de passe
-redis6-cli -a Moulines1 ping
+sudo dnf update -y
+sudo dnf install -y python3 python3-pip redis6 git
 ```
 
-### Vérifier les données Redis
+2. Configure Redis with password (see `DEPLOYMENT.md`)
+
+3. Create systemd services:
+   - `flask-app.service` - Gunicorn with 4 workers
+   - `celery-worker.service` - Background task processing
+
+4. Enable and start services:
 ```bash
-# Voir toutes les clés extraction
-redis6-cli -a Moulines1 KEYS "extraction:*"
-
-# Voir le contenu d'une clé
-redis6-cli -a Moulines1 GET "extraction:abc123..."
-
-# Voir le temps restant avant expiration
-redis6-cli -a Moulines1 TTL "extraction:abc123..."
-
-# Supprimer une clé manuellement
-redis6-cli -a Moulines1 DEL "extraction:abc123..."
-
-# Vider toute la base Redis (ATTENTION!)
-redis6-cli -a Moulines1 FLUSHDB
+sudo systemctl enable flask-app celery-worker
+sudo systemctl start flask-app celery-worker
 ```
 
-### Problème de barre de progression bloquée
+For detailed deployment instructions, see **`DEPLOYMENT.md`**.
 
-Si la barre de progression reste à 0% puis saute à 100% :
-- **Cause**: Le dictionnaire `extraction_progress` n'est pas partagé entre workers Gunicorn
-- **Solution**: Redis est maintenant utilisé pour partager l'état entre workers ✅
+For GPU instance configuration, see **`EC2_GPU_CONFIG.md`**.
 
-### Celery ne trouve pas les tâches
-```bash
-# Vérifier que vous êtes dans le bon répertoire
-celery -A celery_app inspect active
+## � Security
 
-# Vérifier que tasks.py est bien importé dans celery_app.py
-grep "import tasks" celery_app.py
-```
+- **ZipSlip protection**: Validates file paths during extraction
+- **Strict validation**: Enforces expected folder structure
+- **File size limit**: 8 GB maximum
+- **Allowed formats**: ZIP, TAR, TAR.GZ, TGZ
+- **Automatic cleanup**: Removes partial uploads on validation failure
+- **Redis authentication**: Required for production environments
 
-### Erreur "Command 'bash' not found" (Celery)
+## �️ Technology Stack
 
-Si Celery ne trouve pas `bash` lors de l'exécution de `simulate_pipeline.sh` :
-- **Cause**: La variable `PATH` n'est pas définie dans le service systemd
-- **Solution**: Ajouter `Environment="PATH=/usr/bin:/bin"` dans `/etc/systemd/system/celery-worker.service`
-
-```ini
-[Service]
-Environment="PATH=/home/ec2-user/app/venv/bin:/usr/local/bin:/usr/bin:/bin"
-```
-
-### Problèmes de permissions
-```bash
-# Donner les permissions au script
-chmod +x simulate_pipeline.sh
-```
-
-## 📌 Notes importantes
-
-- La simulation de pipeline prend environ **40 secondes** (5 sec par étape)
-- Le worker Celery traite les tâches **séquentiellement**
-- Les fichiers ZIP sont supprimés après extraction réussie
-- En cas d'erreur de validation, tout est nettoyé automatiquement
-- **Redis stocke les progrès d'extraction pendant 1 heure** (TTL = 3600s)
-- **Gunicorn utilise 4 workers** en production pour gérer les requêtes simultanées
-- **La barre de progression se met à jour toutes les 10 fichiers** pour optimiser les performances
-- **Le frontend poll le status toutes les 300ms** pour une progression fluide
-
-### Pourquoi Redis pour l'extraction progress ?
-
-Avec Gunicorn (4 workers), chaque worker a sa propre mémoire. Sans Redis :
-- Worker #1 extrait le ZIP et stocke `extraction_progress[job_id]` dans **sa mémoire**
-- Worker #2 reçoit une requête `/extract_status/<job_id>` mais ne voit **rien** dans sa mémoire → 404 !
-
-Avec Redis :
-- Worker #1 écrit dans Redis : `SET extraction:job_id {...}`
-- Worker #2, #3, #4 lisent depuis Redis : `GET extraction:job_id` → ✅ Partagé !
-
-## 🔐 Sécurité
-
-- Protection contre les attaques **ZipSlip**
-- Validation stricte de la structure des fichiers
-- Limite de taille : **8 GB**
-- Types de fichiers autorisés : ZIP, TAR, TAR.GZ, TGZ
-
-## 📈 Évolutions possibles
-
-- [ ] Ajouter plusieurs workers Celery pour le parallélisme
-- [ ] Implémenter l'authentification utilisateur
-- [ ] Ajouter des notifications par email
-- [ ] Logger les événements dans une base de données
-- [ ] Ajouter un monitoring avec Flower (interface Celery)
+- **Backend**: Flask 3.0, Gunicorn 21.2
+- **Task Queue**: Celery 5.3, Redis 5.0
+- **AWS**: boto3 1.34 (EC2, EFS)
+- **SSH**: paramiko 3.3
+- **Frontend**: Vanilla JavaScript (no framework)
+- **UI Design**: Modern flat design with blue accent (#3b82f6)
