@@ -33,10 +33,6 @@ INSTANCE_STOP_TIMEOUT = 7200
 POLLING_INTERVAL = 30
 PIPELINE_TIMEOUT = 7200
 
-# Auto-stop behavior
-AUTO_STOP_AFTER_PIPELINE = False  # Set to True to stop instance after each pipeline (saves money but slower)
-                                   # Set to False to keep instance running (faster but costs more)
-
 def get_instance_tags(recording_id):
     """Generate tags for GPU instance."""
     return [{

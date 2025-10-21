@@ -216,7 +216,7 @@
             <div class="recording-card">
                 <div class="recording-header">
                     <div>
-                        <div class="recording-id">🎥 {{ rec.id }}</div>
+                        <div class="rechording-id">🎥 {{ rec.id }}</div>
                         {% if rec.timestamp %}
                         <div class="timestamp">📅 {{ rec.timestamp[:19].replace('T', ' ') }}</div>
                         {% endif %}
@@ -274,7 +274,7 @@
         if (hasProcessing) {
             setTimeout(() => {
                 location.reload();
-            }, 10000);
+            }, 3000);
         }
     </script>
 </body>

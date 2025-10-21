@@ -73,13 +73,20 @@ def run_pipeline_gpu(recording_id, recording_path):
         update_status(recording_path, "error", f"GPU pipeline failed: {message}")
         raise Exception(f"GPU pipeline failed: {message}")
     
+    # Business Logic: Wait for NFS cache sync and verify output
+    print(f"[VALIDATION] Pipeline execution completed, verifying output file...")
+    print(f"[VALIDATION] Waiting 6s for NFS cache synchronization (acregmin=3s)...")
+    time.sleep(6)
+    
     # Verify results
     export_csv = os.path.join(recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv")
     
+    print(f"[VALIDATION] Checking for output file: {export_csv}")
     if not os.path.isfile(export_csv):
         update_status(recording_path, "error", "Pipeline completed but output file not found.")
         raise FileNotFoundError(f"Expected output file not found: {export_csv}")
     
+    print(f"✅ Output file validated")
     update_status(recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}")
     
     return f"Pipeline completed for {recording_id} on GPU instance {instance_id}"

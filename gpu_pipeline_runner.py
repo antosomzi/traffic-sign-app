@@ -96,11 +96,6 @@ def start_and_run_pipeline_ssh(recording_id):
         
         print(f"✅ Pipeline completed in {elapsed // 60}min")
         
-        output_file = f"{EFS_MOUNT_POINT}/recordings/{recording_id}/result_pipeline_stable/s7_export_csv/supports.csv"
-        if not os.path.exists(output_file):
-            raise Exception("Output file not found")
-        print("✅ Output verified")
-        
         ssh.close()
         print("✅ SSH closed")
         
@@ -108,7 +103,7 @@ def start_and_run_pipeline_ssh(recording_id):
         ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
         print("✅ Instance stopped")
         
-        return True, GPU_INSTANCE_ID, "Pipeline completed successfully"
+        return True, GPU_INSTANCE_ID, "Pipeline execution completed successfully"
         
     except Exception as e:
         error_msg = str(e)
