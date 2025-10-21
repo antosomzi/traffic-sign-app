@@ -253,6 +253,7 @@ def extract_archive(job_id, zip_path, temp_root, final_root):
     try:
         # Open ZIP and start extraction
         prog["status"] = "running"
+        prog["phase"] = "running"  # Clear the "extracting" phase
         set_extraction_progress(job_id, prog)
         
         with zipfile.ZipFile(zip_path, "r") as z:
@@ -396,15 +397,11 @@ def upload_recording():
     filename = f"{job_id}_{file.filename}"
     save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
-    # Read file content into memory before thread starts (Flask closes file after request)
-    try:
-        file_content = file.read()
-    except Exception as e:
-        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
-
     # Initialize extraction progress in Redis
     initial_progress = {
-        "status": "queued",
+        "status": "reading",
+        "phase": "reading",
+        "progress_percent": 0,
         "total_files": 0,
         "extracted_files": 0,
         "extract_size": None,
@@ -413,6 +410,14 @@ def upload_recording():
         "error_details": None
     }
     set_extraction_progress(job_id, initial_progress)
+
+    # Read file content into memory before thread starts (Flask closes file after request)
+    try:
+        file_content = file.read()
+        # Update progress after reading (15%)
+        update_extraction_progress(job_id, phase="writing", progress_percent=15)
+    except Exception as e:
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
 
     def save_and_extract():
         """Saves file, extracts ZIP, then adds pipeline task to Celery queue"""
@@ -424,6 +429,8 @@ def upload_recording():
             # Write file content to disk
             with open(save_path, 'wb') as f:
                 f.write(file_content)
+            # Update progress after writing (30% total)
+            update_extraction_progress(job_id, phase="extracting", progress_percent=30)
         except Exception as e:
             prog["status"] = "error"
             prog["error_msg"] = f"Save failed: {str(e)}"
@@ -462,11 +469,40 @@ def extract_status(job_id):
         return jsonify({"error": "Unknown job_id"}), 404
 
     status = prog["status"]
+    phase = prog.get("phase", "")
+    progress_percent = prog.get("progress_percent", 0)
+
+    # Handle reading and writing phases
+    if status == "reading":
+        return jsonify({
+            "status": "preparing",
+            "phase": "reading",
+            "percent": progress_percent,
+            "message": "Reading uploaded file..."
+        }), 200
+    
+    if phase == "writing":
+        return jsonify({
+            "status": "preparing",
+            "phase": "writing",
+            "percent": progress_percent,
+            "message": "Writing file to disk..."
+        }), 200
+    
+    if phase == "extracting":
+        return jsonify({
+            "status": "preparing",
+            "phase": "extracting",
+            "percent": progress_percent,
+            "message": "Preparing extraction..."
+        }), 200
 
     if status == "running":
         total = prog["total_files"]
         done = prog["extracted_files"]
-        percent = (done / total) * 100 if total > 0 else 0
+        # Calculate progress: 30% (reading+writing) + 70% (extraction)
+        extraction_percent = (done / total) * 70 if total > 0 else 0
+        percent = 30 + extraction_percent
         
         return jsonify({
             "status": "running",

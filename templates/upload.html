@@ -312,17 +312,25 @@
         });
 
         async function pollExtractionStatus(jobId) {
-            let queuedProgress = 0;
             const interval = setInterval(async () => {
                 try {
                     const response = await fetch(`/extract_status/${jobId}`);
                     const data = await response.json();
 
-                    if (data.status === 'queued') {
-                        // Simulate slow progress while queued (0% -> 5%)
-                        queuedProgress = Math.min(queuedProgress + 0.5, 5);
-                        progressFill.style.width = `${queuedProgress}%`;
-                        progressText.textContent = 'Uploading and preparing archive...';
+                    if (data.status === 'preparing') {
+                        // Show progress for reading, writing, and preparing phases
+                        const percent = data.percent || 0;
+                        progressFill.style.width = `${percent}%`;
+                        
+                        if (data.phase === 'reading') {
+                            progressText.textContent = `Reading uploaded file... (${percent.toFixed(0)}%)`;
+                        } else if (data.phase === 'writing') {
+                            progressText.textContent = `Writing file to disk... (${percent.toFixed(0)}%)`;
+                        } else if (data.phase === 'extracting') {
+                            progressText.textContent = `Preparing extraction... (${percent.toFixed(0)}%)`;
+                        } else {
+                            progressText.textContent = data.message || 'Preparing...';
+                        }
                     } else if (data.status === 'running') {
                         const percent = data.percent || 0;
                         progressFill.style.width = `${percent}%`;
