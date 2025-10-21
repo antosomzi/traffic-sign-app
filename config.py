@@ -25,14 +25,6 @@ class Config:
     # File upload settings
     ALLOWED_EXTENSIONS = {"zip", "tar", "tar.gz", "tgz"}
     MAX_CONTENT_LENGTH = 8 * 1024 * 1024 * 1024  # 8 GiB
-    
-    # Create folders if they don't exist
-    @classmethod
-    def init_folders(cls):
-        """Create necessary folders if they don't exist"""
-        os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)
-        os.makedirs(cls.EXTRACT_FOLDER, exist_ok=True)
-        os.makedirs(cls.TEMP_EXTRACT_FOLDER, exist_ok=True)
 
 
 # Redis client initialization
@@ -52,12 +44,3 @@ else:
         db=0,
         decode_responses=True
     )
-
-
-# Celery availability check
-try:
-    from tasks import run_pipeline_task
-    CELERY_AVAILABLE = True
-except ImportError:
-    CELERY_AVAILABLE = False
-    print("Warning: Celery not available. Pipeline tasks will not be queued.")

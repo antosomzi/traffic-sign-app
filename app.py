@@ -25,10 +25,8 @@ def create_app(config_class=Config):
     """
     app = Flask(__name__)
     
-    # Load configuration
-    app.config["UPLOAD_FOLDER"] = config_class.UPLOAD_FOLDER
-    app.config["EXTRACT_FOLDER"] = config_class.EXTRACT_FOLDER
-    app.config["TEMP_EXTRACT_FOLDER"] = config_class.TEMP_EXTRACT_FOLDER
+    # Flask configuration
+    # MAX_CONTENT_LENGTH is used by Flask to automatically reject large uploads
     app.config["MAX_CONTENT_LENGTH"] = config_class.MAX_CONTENT_LENGTH
     
     # Register blueprints
@@ -41,24 +39,6 @@ def create_app(config_class=Config):
 
 # Create application instance
 app = create_app()
-
-
-# Backwards compatibility wrappers for tasks.py
-# These delegate to the service layer
-from services.redis_service import RedisProgressService
-
-
-def get_extraction_progress(job_id):
-    """Backwards compatibility wrapper for RedisProgressService"""
-    return RedisProgressService.get_extraction_progress(job_id)
-
-def set_extraction_progress(job_id, progress_dict):
-    """Backwards compatibility wrapper for RedisProgressService"""
-    return RedisProgressService.set_extraction_progress(job_id, progress_dict)
-
-def update_extraction_progress(job_id, **kwargs):
-    """Backwards compatibility wrapper for RedisProgressService"""
-    return RedisProgressService.update_extraction_progress(job_id, **kwargs)
 
 
 if __name__ == "__main__":
