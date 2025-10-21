@@ -60,7 +60,8 @@ For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.
 
 ```
 app/
-├── app.py                      # Flask application & routes
+├── app.py                      # Flask application entry point (factory pattern)
+├── config.py                   # Centralized configuration management
 ├── celery_app.py               # Celery configuration
 ├── tasks.py                    # Async pipeline tasks
 ├── gpu_pipeline_runner.py      # GPU instance pipeline execution
@@ -71,6 +72,17 @@ app/
 ├── .env                        # Environment variables
 ├── DEPLOYMENT.md               # EC2 deployment guide
 ├── EC2_GPU_CONFIG.md           # GPU instance setup
+├── routes/                     # Blueprint-based routing
+│   ├── upload_routes.py       # Upload & extraction endpoints
+│   ├── status_routes.py       # Status monitoring
+│   └── download_routes.py     # Result downloads
+├── services/                   # Business logic layer
+│   ├── redis_service.py       # Redis operations
+│   ├── validation_service.py  # Structure validation
+│   └── extraction_service.py  # ZIP extraction logic
+├── utils/                      # Utility functions
+│   ├── file_utils.py          # File operations
+│   └── cleanup_utils.py       # macOS file cleanup
 ├── templates/
 │   ├── upload.html            # Upload interface
 │   └── status.html            # Status monitoring

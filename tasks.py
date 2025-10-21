@@ -38,8 +38,8 @@ def run_pipeline_local(recording_id, recording_path):
     print(f"[LOCAL] Running pipeline locally for: {recording_id}")
     update_status(recording_path, "processing", "ML pipeline in progress (local)...")
 
-    # Script is in the app directory
-    pipeline_script = os.path.join(BASE_PATH, "app", "simulate_pipeline.sh")
+    # Script is in the BASE_PATH directory
+    pipeline_script = os.path.join(BASE_PATH, "simulate_pipeline.sh")
     cmd = f"bash {pipeline_script} {recording_path}"
 
     subprocess.run(cmd, shell=True, check=True)
