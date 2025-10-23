@@ -78,9 +78,9 @@ def start_and_run_pipeline_ssh(recording_id):
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         docker_cmd = (
             "sudo docker run --rm --gpus all "
-            f"-v /home/ec2-user/traffic_sign_pipeline:/usr/src/app "
+            "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline:/usr/src/app "
             f"-v {recording_path}:/data "
-            f"-v /home/ec2-user/traffic_sign_pipeline/weights:/usr/src/app/weights "
+            "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline/weights:/usr/src/app/weights "
             "traffic-pipeline:gpu -i /data"
         )
         print(f"[GPU] Running: {docker_cmd}")
