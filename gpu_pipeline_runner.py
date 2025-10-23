@@ -74,26 +74,32 @@ def start_and_run_pipeline_ssh(recording_id):
             raise Exception(f"EFS mount failed: {stderr.read().decode()}")
         print("✅ EFS mounted")
         
-        print(f"[GPU] Running pipeline (may take several minutes)...")
+        print(f"[GPU] Running real pipeline in Docker (may take several minutes)...")
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
-        pipeline_cmd = f"bash {EFS_MOUNT_POINT}/app/simulate_pipeline.sh {recording_path}"
-        
-        stdin, stdout, stderr = ssh.exec_command(pipeline_cmd, timeout=7200)
-        
+        docker_cmd = (
+            "sudo docker run --rm --gpus all "
+            f"-v /home/ec2-user/traffic_sign_pipeline:/usr/src/app "
+            f"-v {recording_path}:/data "
+            f"-v /home/ec2-user/traffic_sign_pipeline/weights:/usr/src/app/weights "
+            "traffic-pipeline:gpu -i /data"
+        )
+        print(f"[GPU] Running: {docker_cmd}")
+        stdin, stdout, stderr = ssh.exec_command(docker_cmd, timeout=7200)
+
         start_time = time.time()
         while not stdout.channel.exit_status_ready():
             elapsed = int(time.time() - start_time)
             if elapsed % 60 == 0:
                 print(f"   Pipeline running... {elapsed // 60}min")
             time.sleep(5)
-        
+
         exit_code = stdout.channel.recv_exit_status()
         elapsed = int(time.time() - start_time)
-        
+
         if exit_code != 0:
             error = stderr.read().decode()
             raise Exception(f"Pipeline failed (exit {exit_code}): {error[:200]}")
-        
+
         print(f"✅ Pipeline completed in {elapsed // 60}min")
         
         ssh.close()

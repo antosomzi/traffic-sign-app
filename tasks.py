@@ -63,32 +63,29 @@ def run_pipeline_local(recording_id, recording_path):
 
 def run_pipeline_gpu(recording_id, recording_path):
     """Run pipeline on a dedicated GPU instance via SSH."""
+    # Only handles the GPU/SSH/Docker workflow
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
     update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
-    
-    # Start existing GPU instance and execute pipeline via SSH
+
     success, instance_id, message = start_and_run_pipeline_ssh(recording_id)
-    
+
     if not success:
         update_status(recording_path, "error", f"GPU pipeline failed: {message}")
         raise Exception(f"GPU pipeline failed: {message}")
-    
-    # Business Logic: Wait for NFS cache sync and verify output
-    print(f"[VALIDATION] Pipeline execution completed, verifying output file...")
+
+    # Wait for NFS cache sync and verify output
     print(f"[VALIDATION] Waiting 6s for NFS cache synchronization (acregmin=3s)...")
     time.sleep(6)
-    
-    # Verify results
+
     export_csv = os.path.join(recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv")
-    
     print(f"[VALIDATION] Checking for output file: {export_csv}")
     if not os.path.isfile(export_csv):
         update_status(recording_path, "error", "Pipeline completed but output file not found.")
         raise FileNotFoundError(f"Expected output file not found: {export_csv}")
-    
+
     print(f"✅ Output file validated")
     update_status(recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}")
-    
+
     return f"Pipeline completed for {recording_id} on GPU instance {instance_id}"
 
 
