@@ -7,7 +7,8 @@ from services.redis_service import RedisProgressService
 from services.validation_service import ValidationService
 from utils.file_utils import compute_folder_size, create_status_file
 from utils.cleanup_utils import clean_macos_files
-
+import zipfile
+import io
 
 class ExtractionService:
     """Service for extracting and validating uploaded recordings"""
@@ -23,15 +24,13 @@ class ExtractionService:
         self.redis_service = redis_service or RedisProgressService
         self.validation_service = validation_service or ValidationService
     
-    def check_recording_exists(self, file):
+    def check_recording_exists(self, file_bytes):
         """
-        Inspect the zip to determine the recording_id and check if it already exists in final_root.
+        Inspect the zip (from bytes) to determine the recording_id and check if it already exists in final_root.
         Returns (True, recording_id) if it exists, (False, recording_id) if not, or (None, None) on error.
         """
-        import zipfile
         try:
-            file.seek(0)
-            with zipfile.ZipFile(file, "r") as z:
+            with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as z:
                 members = z.infolist()
                 # Ignore macOS system files
                 members = [m for m in members if not (

@@ -49,8 +49,15 @@ def upload_recording():
     save_path = os.path.join(Config.UPLOAD_FOLDER, filename)
 
 
-    # Check existence du recording via ExtractionService
-    exists, zip_top = extraction_service.check_recording_exists(file)
+
+    # Read file content into memory ONCE
+    try:
+        file_content = file.read()
+    except Exception as e:
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
+
+    # Check existence du recording via ExtractionService (with bytes)
+    exists, zip_top = extraction_service.check_recording_exists(file_content)
     if exists is None:
         return jsonify({"error": "Uploaded file is not a valid ZIP archive or cannot be inspected."}), 400
     if exists:
@@ -72,13 +79,8 @@ def upload_recording():
     }
     RedisProgressService.set_extraction_progress(job_id, initial_progress)
 
-    # Read file content into memory before thread starts (Flask closes file after request)
-    try:
-        file_content = file.read()
-        # Update progress after reading (15%)
-        RedisProgressService.update_extraction_progress(job_id, phase="writing", progress_percent=15)
-    except Exception as e:
-        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
+    # Update progress after reading (15%)
+    RedisProgressService.update_extraction_progress(job_id, phase="writing", progress_percent=15)
 
     def save_and_extract():
         """Saves file, extracts ZIP, then adds pipeline task to Celery queue"""
