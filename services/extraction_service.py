@@ -23,6 +23,40 @@ class ExtractionService:
         self.redis_service = redis_service or RedisProgressService
         self.validation_service = validation_service or ValidationService
     
+    def check_recording_exists(self, file):
+        """
+        Inspect the zip to determine the recording_id and check if it already exists in final_root.
+        Returns (True, recording_id) if it exists, (False, recording_id) if not, or (None, None) on error.
+        """
+        import zipfile
+        try:
+            file.seek(0)
+            with zipfile.ZipFile(file, "r") as z:
+                members = z.infolist()
+                # Ignore macOS system files
+                members = [m for m in members if not (
+                    m.filename.startswith("__MACOSX/") or
+                    "/.DS_Store" in m.filename or
+                    m.filename == ".DS_Store" or
+                    m.filename.startswith("._")
+                )]
+                top_levels = set()
+                for member in members:
+                    if member.filename.strip("/"):
+                        top = member.filename.rstrip("/").split("/")[0]
+                        top_levels.add(top)
+                # There must be exactly one root folder
+                if len(top_levels) != 1:
+                    return None, None
+                zip_top = top_levels.pop()
+                from config import Config
+                final_path = os.path.join(Config.EXTRACT_FOLDER, zip_top)
+                if os.path.exists(final_path):
+                    return True, zip_top
+                return False, zip_top
+        except Exception:
+            return None, None
+
     def extract_archive(self, job_id, zip_path, temp_root, final_root):
         """
         Atomic extraction process:

@@ -16,8 +16,6 @@ Web application for uploading, validating, and asynchronously processing traffic
 
 ## 🏗️ Architecture
 
-**3-Tier Asynchronous Processing System:**
-
 - **Flask**: Web interface for file upload, validation, and result delivery
 - **Redis**: 
   - Message broker for Celery task queue
@@ -45,22 +43,22 @@ Toggle via `USE_GPU_INSTANCE` environment variable:
 
 For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
-## ✨ Features
+## ✨ FLow
 
-- **Drag-and-drop file upload** with real-time progress tracking
-- **Strict validation** of recording structure before processing
-- **Asynchronous processing** with status monitoring
-- **Automatic cleanup** of macOS system files (`__MACOSX/`, `.DS_Store`)
-- **Atomic operations** (extract → validate → move)
-- **Multi-worker safe** progress tracking via Redis
-- **GPU instance orchestration** for compute-intensive ML tasks
-- **Downloadable results** (CSV exports of detected traffic signs)
+1. User uploads file → extraction job starts (tracked by `job_id`)
+2. Extraction completes → status set to `done` in Redis
+3. Celery task is queued for ML pipeline (using `recording_id`)
+4. Celery worker processes the task asynchronously
+5. Pipeline results and status are written to the recording folder
+6. User can download results or check status via the web interface
+
+*See [`JOB_QUEUE_STATUS.md`](JOB_QUEUE_STATUS.md) for a detailed explanation of the job queue, status tracking, and Celery integration.*
 
 ## 📁 Project Structure
 
 ```
 app/
-├── app.py                      # Flask application entry point (factory pattern)
+├── app.py                      # Flask application entry point 
 ├── config.py                   # Centralized configuration management
 ├── celery_app.py               # Celery configuration
 ├── tasks.py                    # Async pipeline tasks
@@ -177,7 +175,7 @@ Access the application at: **http://localhost:5000**
 - Once processing is complete, click "Download Results"
 - Downloads a ZIP containing `supports.csv` and `signs.csv`
 
-## 🗂️ Expected Data Structure
+## 🗂️ Expected Input Data Structure
 
 The uploaded ZIP must contain exactly one root folder with the following structure:
 
@@ -221,8 +219,6 @@ USE_GPU_INSTANCE=false
 FLASK_ENV=production
 ```
 
-**TTL**: 1 hour (auto-cleanup)
-
 ## � Security
 
 - **ZipSlip protection**: Validates file paths during extraction
@@ -232,11 +228,3 @@ FLASK_ENV=production
 - **Automatic cleanup**: Removes partial uploads on validation failure
 - **Redis authentication**: Required for production environments
 
-## �️ Technology Stack
-
-- **Backend**: Flask 3.0, Gunicorn 21.2
-- **Task Queue**: Celery 5.3, Redis 5.0
-- **AWS**: boto3 1.34 (EC2, EFS)
-- **SSH**: paramiko 3.3
-- **Frontend**: Vanilla JavaScript (no framework)
-- **UI Design**: Modern flat design with blue accent (#3b82f6)

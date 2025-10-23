@@ -264,6 +264,7 @@
             selectedFile.textContent = `📎 ${file.name} (${formatFileSize(file.size)})`;
             selectedFile.style.display = 'block';
             uploadBtn.style.display = 'block';
+            uploadBtn.disabled = false; // Réactive le bouton uniquement lors d'une nouvelle sélection
             message.style.display = 'none';
         }
 
@@ -345,7 +346,7 @@
                         successMsg += `<strong>Size:</strong> ${data.extract_size}<br>`;
                         successMsg += `<strong>Status:</strong> ${data.message || 'Awaiting processing'}`;
                         
-                        uploadBtn.disabled = false;
+                        uploadBtn.disabled = true; // Désactive le bouton après succès
                         
                         // Hide progress bar first, then show success message
                         setTimeout(() => {

@@ -43,9 +43,20 @@ def upload_recording():
     if not allowed_file(file.filename):
         return jsonify({"error": "Invalid file type. Only ZIP/TAR allowed."}), 400
 
+
     job_id = uuid.uuid4().hex
     filename = f"{job_id}_{file.filename}"
     save_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+
+
+    # Check existence du recording via ExtractionService
+    exists, zip_top = extraction_service.check_recording_exists(file)
+    if exists is None:
+        return jsonify({"error": "Uploaded file is not a valid ZIP archive or cannot be inspected."}), 400
+    if exists:
+        return jsonify({"error": f"Recording with ID '{zip_top}' already exists."}), 400
+
+    # --- Fin du check existence ---
 
     # Initialize extraction progress in Redis
     initial_progress = {
