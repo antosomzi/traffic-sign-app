@@ -87,6 +87,7 @@ Each job's status is stored as a JSON object in Redis. Example attributes:
 - See `services/redis_service.py` for Redis logic
 - See `routes/upload_routes.py` for upload and status endpoints
 - See `services/extraction_service.py` for extraction and status update logic
+
 # 9. Transition to Celery & Pipeline Task Queue
 
 ### When is Extraction 'done'?
@@ -97,7 +98,7 @@ Each job's status is stored as a JSON object in Redis. Example attributes:
 - At this point, the frontend will see `{status: 'done', ...}` in `/extract_status/<job_id>`.
 
 ### How is the Celery Task Queued?
-- If Celery is available, the backend immediately queues a pipeline task after extraction is successful:
+- If Celery is available, the backend immediately queues a pipeline task after extraction is successful ( the backend know when it's successful as it is the end of a sync fonction):
   - `run_pipeline_task.delay(recording_id)` is called in the extraction thread
   - This adds a new task to the Celery queue (using Redis as broker)
 - The Celery worker picks up the task asynchronously and runs the ML pipeline for the given `recording_id`.
