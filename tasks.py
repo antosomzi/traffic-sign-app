@@ -75,7 +75,7 @@ def run_pipeline_gpu(recording_id, recording_path):
 
     # Wait for NFS cache sync and verify output
     print(f"[VALIDATION] Waiting 6s for NFS cache synchronization (acregmin=3s)...")
-    time.sleep(6)
+    time.sleep(60)
 
     export_csv = os.path.join(recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv")
     print(f"[VALIDATION] Checking for output file: {export_csv}")
