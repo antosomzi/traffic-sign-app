@@ -48,12 +48,6 @@ This document explains how the polling mechanism works on the status page of the
 
 ---
 
-## 5. Limitations & Improvements
-- The current polling is page-based (full reload), not AJAX. This is simple but can be improved for smoother UX.
-- For large numbers of jobs or users, consider switching to AJAX polling or WebSockets for more efficient updates.
-
----
-
 ## 6. References
 - `routes/status_routes.py` (backend logic)
 - `templates/status.html` (frontend logic)
