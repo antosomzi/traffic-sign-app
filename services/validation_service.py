@@ -85,11 +85,11 @@ class ValidationService:
         if not cam_files:
             missing_files["camera"] = ["At least one .mp4 video file required"]
 
-        # Location: exactly two .csv files
+        # Location: at least one .csv file
         loc_dir = os.path.join(imei_path, "location")
         loc_csvs = [f for f in os.listdir(loc_dir) if f.lower().endswith(".csv")]
-        if len(loc_csvs) != 2:
-            missing_files["location"] = ["Exactly two .csv files required"]
+        if len(loc_csvs) < 1:
+            missing_files["location"] = ["At least one .csv file required"]
 
         if missing_files:
             errors["missing_files"] = missing_files
