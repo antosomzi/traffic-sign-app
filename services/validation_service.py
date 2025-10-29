@@ -63,54 +63,32 @@ class ValidationService:
         imei_folder = imei_folders[0]
         imei_path = os.path.join(device_path, imei_folder)
         
-        required_subfolders = ["acceleration", "calibration", "camera", "location", "processed"]
+        required_subfolders = ["camera", "location"]
         missing_folders = []
-        
         for sub in required_subfolders:
             full_sub = os.path.join(imei_path, sub)
             if not os.path.isdir(full_sub):
                 missing_folders.append(sub)
-        
         if missing_folders:
             errors["missing_folders"] = f"Missing folders: {', '.join(missing_folders)}"
             return False, errors
-        
+
         missing_files = {}
-        
-        acc_file = f"{recording_id}_acc.csv"
-        acc_path = os.path.join(imei_path, "acceleration", acc_file)
-        if not os.path.isfile(acc_path):
-            missing_files["acceleration"] = [acc_file]
-        
-        calib_dir = os.path.join(imei_path, "calibration")
-        calib_files = [f for f in os.listdir(calib_dir) if f.endswith("_calibration.csv")]
-        if not calib_files:
-            missing_files["calibration"] = ["At least one *_calibration.csv file required"]
-        
+
+        # Camera: at least one .mp4 file
         cam_dir = os.path.join(imei_path, "camera")
-        video_name = f"{recording_id}_cam_{recording_id}.mp4"
-        cam_missing = []
-        if video_name not in os.listdir(cam_dir):
-            cam_missing.append(video_name)
-        if "camera_params.csv" not in os.listdir(cam_dir):
-            cam_missing.append("camera_params.csv")
-        if cam_missing:
-            missing_files["camera"] = cam_missing
-        
+        cam_files = [f for f in os.listdir(cam_dir) if f.lower().endswith(".mp4")]
+        if not cam_files:
+            missing_files["camera"] = ["At least one .mp4 video file required"]
+
+        # Location: exactly two .csv files
         loc_dir = os.path.join(imei_path, "location")
-        loc_files_needed = [f"{recording_id}_loc.csv", f"{recording_id}_loc_cleaned.csv"]
-        loc_missing = [f for f in loc_files_needed if f not in os.listdir(loc_dir)]
-        if loc_missing:
-            missing_files["location"] = loc_missing
-        
-        proc_dir = os.path.join(imei_path, "processed")
-        proc_files_needed = [f"{recording_id}_processed_acc.csv", f"{recording_id}_processed_loc.csv"]
-        proc_missing = [f for f in proc_files_needed if f not in os.listdir(proc_dir)]
-        if proc_missing:
-            missing_files["processed"] = proc_missing
-        
+        loc_csvs = [f for f in os.listdir(loc_dir) if f.lower().endswith(".csv")]
+        if len(loc_csvs) != 2:
+            missing_files["location"] = ["Exactly two .csv files required"]
+
         if missing_files:
             errors["missing_files"] = missing_files
             return False, errors
-        
+
         return True, {}

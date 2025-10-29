@@ -177,30 +177,23 @@ Access the application at: **http://localhost:5000**
 
 ## 🗂️ Expected Input Data Structure
 
-The uploaded ZIP must contain exactly one root folder with the following structure:
+
+The uploaded ZIP must contain exactly one root folder with the following minimal structure:
 
 ```
 recording_id/
   └── device_id/
       └── imei_folder/
-          ├── acceleration/
-          │     └── recording_id_acc.csv
-          ├── calibration/
-          │     └── *_calibration.csv (at least 1 file)
           ├── camera/
-          │     ├── recording_id_cam_recording_id.mp4
-          │     └── camera_params.csv
-          ├── location/
-          │     ├── recording_id_loc.csv
-          │     └── recording_id_loc_cleaned.csv
-          └── processed/
-                ├── recording_id_processed_acc.csv
-                └── recording_id_processed_loc.csv
+          │     └── <video_file>.mp4
+          └── location/
+                ├── <file1>.csv
+                └── <file2>.csv
 ```
 
 **Notes:**
 - macOS system files (`__MACOSX/`, `.DS_Store`, `._*`) are automatically removed
-- Structure validation is strict - all folders and files must be present
+- Structure validation is strict – only the above folders/files are required
 
 ## ⚙️ Configuration
 
