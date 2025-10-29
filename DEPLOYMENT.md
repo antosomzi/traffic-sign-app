@@ -201,7 +201,7 @@ sudo systemctl status celery-worker
 # View Flask logs
 sudo journalctl -u flask-app -f
 
-# View Celery logs
+# Commande to follow the pipeline progress => View Celery logs
 sudo journalctl -u celery-worker -f
 ```
 
@@ -399,36 +399,4 @@ df -h
 
 # Check Redis memory usage
 redis6-cli -a Moulines1 INFO memory
-```
-
-## Security Notes
-
-- **Redis**: Bound to `127.0.0.1` (localhost only) - no external access possible
-- **Redis password**: `Moulines1` (configured in `.env` and `redis.conf`)
-- **Environment variables**: `.env` file contains secrets - DO NOT commit to git (already in `.gitignore`)
-- **Flask SECRET_KEY**: Change to a random value in production:
-  ```bash
-  # Generate a secure key
-  python -c 'import secrets; print(secrets.token_hex(32))'
-  
-  # Update .env
-  nano .env
-  # Change: SECRET_KEY=<generated-key>
-  ```
-- **AWS Security Group**: Only open ports 22 (SSH) and 5000 (HTTP), restrict to your IP/network
-- **systemd services**: Run as `ec2-user` (non-root) for security
-
-## Backup Strategy
-
-```bash
-# Backup recordings folder (contains all uploaded data and results)
-tar -czf backup_$(date +%Y%m%d).tar.gz recordings/
-
-# Copy to S3 (optional)
-aws s3 cp backup_$(date +%Y%m%d).tar.gz s3://your-bucket/backups/
-
-# Automated daily backup (add to crontab)
-crontab -e
-# Add:
-0 2 * * * cd /home/ec2-user/app && tar -czf /tmp/backup_$(date +\%Y\%m\%d).tar.gz recordings/
 ```

@@ -1,4 +1,7 @@
+
 # Traffic Sign ML Pipeline
+
+> **ℹ️ All deployment, maintenance, and CI/CD commands and processes are documented in detail in [`DEPLOYMENT.md`](DEPLOYMENT.md). Please refer to that file for any production setup, server management, or automation instructions.**
 
 Web application for uploading, validating, and asynchronously processing traffic sign recordings through a machine learning pipeline.
 
