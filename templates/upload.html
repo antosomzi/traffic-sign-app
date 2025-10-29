@@ -198,8 +198,8 @@
         <div class="upload-area" id="upload-area">
             <div class="upload-icon">📁</div>
             <label for="file-input" class="file-label">Click or drag your file here</label>
-            <input type="file" id="file-input" accept=".zip,.tar,.tar.gz,.tgz">
-            <p class="file-info">Accepted formats: ZIP, TAR, TAR.GZ (max 8 GB)</p>
+            <input type="file" id="file-input" webkitdirectory directory multiple>
+            <p class="file-info">Max 8GB. Folder must contain at least one .mp4 file and one or more GPS .csv files.</p>
         </div>
 
         <div class="selected-file" id="selected-file"></div>
@@ -229,6 +229,7 @@
         const message = document.getElementById('message');
 
         let selectedFileData = null;
+    let selectedFolderFiles = [];
 
         // Drag and drop handlers
         uploadArea.addEventListener('dragover', (e) => {
@@ -255,16 +256,22 @@
 
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
-                handleFileSelect(e.target.files[0]);
+                handleFileSelect(e.target.files);
             }
         });
 
         function handleFileSelect(file) {
-            selectedFileData = file;
-            selectedFile.textContent = `📎 ${file.name} (${formatFileSize(file.size)})`;
+            selectedFolderFiles = Array.from(file);
+            selectedFileData = null;
+            if (selectedFolderFiles.length > 0) {
+                const folderName = selectedFolderFiles[0].webkitRelativePath.split('/')[0];
+                selectedFile.textContent = `📁 ${folderName}/ (${selectedFolderFiles.length} files)`;
+            } else {
+                selectedFile.textContent = '';
+            }
             selectedFile.style.display = 'block';
             uploadBtn.style.display = 'block';
-            uploadBtn.disabled = false; // Réactive le bouton uniquement lors d'une nouvelle sélection
+            uploadBtn.disabled = false;
             message.style.display = 'none';
         }
 
@@ -280,14 +287,25 @@
         }
 
         uploadBtn.addEventListener('click', async () => {
-            if (!selectedFileData) return;
-
-            const formData = new FormData();
-            formData.append('file', selectedFileData);
+            if (selectedFolderFiles.length === 0) return;
 
             uploadBtn.disabled = true;
             progressContainer.style.display = 'block';
             message.style.display = 'none';
+
+            const { zipSync } = window.fflate;
+            const folderName = selectedFolderFiles[0].webkitRelativePath.split('/')[0];
+            const filesObj = {};
+            for (const file of selectedFolderFiles) {
+                let relPath = file.webkitRelativePath;
+                filesObj[relPath] = new Uint8Array(await file.arrayBuffer());
+            }
+            const zipped = zipSync(filesObj, { level: 0 });
+            const zipBlob = new Blob([zipped], { type: 'application/zip' });
+            const zipName = folderName + '.zip';
+
+            const formData = new FormData();
+            formData.append('file', zipBlob, zipName);
 
             try {
                 const response = await fetch('/upload', {
@@ -383,5 +401,6 @@
             message.style.display = 'block';
         }
     </script>
+    <script src="https://unpkg.com/fflate@0.8.2"></script>
 </body>
 </html>
