@@ -48,18 +48,22 @@ class ValidationService:
             return False, errors
         
         device_folder = devices[0]
+        # Vérification : le dossier device doit être uniquement composé de chiffres
+        if not device_folder.isdigit():
+            errors["device_folder"] = f"Device folder not available or invalid: {device_folder}"
+            return False, errors
         device_path = os.path.join(root_path, device_folder)
-        
+
         subentries = os.listdir(device_path)
         imei_folders = [d for d in subentries if os.path.isdir(os.path.join(device_path, d))]
-        
+
         if len(imei_folders) == 0:
             errors["imei_folder"] = "No IMEI folder found"
             return False, errors
         elif len(imei_folders) > 1:
             errors["imei_folder"] = f"Multiple IMEI folders found: {', '.join(imei_folders)}. Only one expected."
             return False, errors
-        
+
         imei_folder = imei_folders[0]
         imei_path = os.path.join(device_path, imei_folder)
         

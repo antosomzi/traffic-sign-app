@@ -38,15 +38,12 @@ def download_zip(recording_id):
             missing.append("output.json (in s6_localisation)")
         return abort(404, description=f"Missing output files: {', '.join(missing)}")
 
+    import io
     zip_filename = f"{recording_id}_results.zip"
-    zip_path = os.path.join(base, zip_filename)
-
-    with zipfile.ZipFile(zip_path, "w") as zipf:
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, "w") as zipf:
         zipf.write(output_file1, arcname=os.path.basename(output_file1))
         zipf.write(output_file2, arcname=os.path.basename(output_file2))
         zipf.write(json_file, arcname=os.path.basename(json_file))
-
-    if os.path.isfile(zip_path):
-        return send_file(zip_path, as_attachment=True, download_name=zip_filename)
-    else:
-        return abort(404, description="Failed to create ZIP file")
+    mem_zip.seek(0)
+    return send_file(mem_zip, as_attachment=True, download_name=zip_filename, mimetype="application/zip")
