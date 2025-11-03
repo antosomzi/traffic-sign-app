@@ -160,12 +160,13 @@ Access the application at: **http://localhost:5000**
 ### 1. Upload Recording
 
 1. Navigate to `http://localhost:5000`
-2. Drag-and-drop or select a ZIP file
-3. Click "Upload and Validate"
-4. The system will:
-   - Extract the archive
-   - Validate the folder structure
-   - Queue a Celery task if valid
+2. Drag-and-drop or select a folder containing your `.mp4` and GPS `.csv` files, organized in the required structure (see below).
+3. The folder will be automatically zipped client-side (store mode, equivalent to `zip -0`) before being sent to the server.
+4. Click "Upload and Validate".
+5. The system will:
+  - Extract the received zip
+  - Validate the folder structure
+  - Launch the pipeline if the structure is correct
 
 ### 2. Monitor Processing
 
@@ -181,7 +182,7 @@ Access the application at: **http://localhost:5000**
 ## 🗂️ Expected Input Data Structure
 
 
-The uploaded ZIP must contain exactly one root folder with the following minimal structure:
+The uploaded folder (which will be zipped client-side) must contain exactly one root folder with the following minimal structure:
 
 ```
 recording_id/
