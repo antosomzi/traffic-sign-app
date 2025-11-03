@@ -53,11 +53,13 @@ def upload_recording():
     # Read file content into memory ONCE
     try:
         file_content = file.read()
+        print(f"📥 File received: {file.filename}, size: {len(file_content)} bytes")
     except Exception as e:
         return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
 
     # Check existence du recording via ExtractionService (with bytes)
     exists, zip_top = extraction_service.check_recording_exists(file_content)
+    print(f"🔍 ZIP validation - exists: {exists}, zip_top: {zip_top}")
     if exists is None:
         return jsonify({"error": "Uploaded file is not a valid ZIP archive or cannot be inspected."}), 400
     if exists:
@@ -78,35 +80,43 @@ def upload_recording():
         "error_details": None
     }
     RedisProgressService.set_extraction_progress(job_id, initial_progress)
+    print(f"✅ Redis progress initialized for job_id: {job_id}")
 
     # Update progress after reading (15%)
     RedisProgressService.update_extraction_progress(job_id, phase="writing", progress_percent=15)
 
     def save_and_extract():
         """Saves file, extracts ZIP, then adds pipeline task to Celery queue"""
+        print(f"🧵 Background thread started for job_id: {job_id}")
         prog = RedisProgressService.get_extraction_progress(job_id)
         if not prog:
+            print(f"❌ No progress found in Redis for job_id: {job_id}")
             return
             
         try:
             # Write file content to disk
+            print(f"💾 Writing file to: {save_path}")
             with open(save_path, 'wb') as f:
                 f.write(file_content)
+            print(f"✅ File written successfully: {save_path}")
             # Update progress after writing (30% total)
             RedisProgressService.update_extraction_progress(job_id, phase="extracting", progress_percent=30)
         except Exception as e:
+            print(f"❌ Save failed for job_id {job_id}: {str(e)}")
             prog["status"] = "error"
             prog["error_msg"] = f"Save failed: {str(e)}"
             RedisProgressService.set_extraction_progress(job_id, prog)
             return
         
         # Extract archive
+        print(f"📦 Starting extraction for job_id: {job_id}")
         recording_id = extraction_service.extract_archive(
             job_id, 
             save_path, 
             Config.TEMP_EXTRACT_FOLDER, 
             Config.EXTRACT_FOLDER
         )
+        print(f"📦 Extraction completed. recording_id: {recording_id}")
         
         # Queue pipeline task if extraction succeeded
         if recording_id and CELERY_AVAILABLE:
@@ -116,10 +126,13 @@ def upload_recording():
                 print(f"✅ Pipeline task queued for: {recording_id}")
             except Exception as e:
                 print(f"⚠️ Could not queue pipeline task: {e}")
+        else:
+            print(f"⚠️ Pipeline not queued. recording_id: {recording_id}, CELERY_AVAILABLE: {CELERY_AVAILABLE}")
 
     # Start save + extraction in background thread
     thread = threading.Thread(target=save_and_extract, daemon=True)
     thread.start()
+    print(f"🚀 Background thread launched for job_id: {job_id}")
 
     return jsonify({"job_id": job_id}), 200
 
