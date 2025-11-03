@@ -74,8 +74,10 @@ class ExtractionService:
         Returns:
             recording_id (str) if successful, None otherwise
         """
+        print(f"🔧 extract_archive called - job_id: {job_id}, zip_path: {zip_path}")
         prog = self.redis_service.get_extraction_progress(job_id)
         if not prog:
+            print(f"❌ No progress found for job_id: {job_id}")
             prog = {
                 "status": "error",
                 "error_msg": "Job not found"
@@ -89,6 +91,7 @@ class ExtractionService:
 
         try:
             # Open ZIP and start extraction
+            print(f"📂 Opening ZIP file: {zip_path}")
             prog["status"] = "running"
             prog["phase"] = "running"  # Clear the "extracting" phase
             self.redis_service.set_extraction_progress(job_id, prog)
@@ -117,6 +120,7 @@ class ExtractionService:
                         top_levels.add(top)
 
                 if len(top_levels) != 1:
+                    print(f"❌ Multiple root folders detected: {top_levels}")
                     prog["status"] = "error"
                     prog["error_msg"] = "Archive must contain exactly one root folder."
                     prog["error_details"] = {"zip_structure": f"Multiple root folders: {', '.join(top_levels)}"}
@@ -124,6 +128,7 @@ class ExtractionService:
                     return
 
                 zip_top = top_levels.pop()
+                print(f"✅ Single root folder found: {zip_top}")
                 os.makedirs(temp_extract_path, exist_ok=True)
 
                 # Extract all files
@@ -144,38 +149,50 @@ class ExtractionService:
                         self.redis_service.set_extraction_progress(job_id, prog)
 
             # Collapse duplicate folders
+            print(f"🔄 Checking for duplicate nested folders at: {temp_extract_path}")
             inner_candidate = os.path.join(temp_extract_path, zip_top)
             if os.path.isdir(inner_candidate):
+                print(f"🔄 Collapsing duplicate folder: {inner_candidate}")
                 temp_flat = temp_extract_path + "__flat"
                 os.rename(inner_candidate, temp_flat)
                 shutil.rmtree(temp_extract_path)
                 os.rename(temp_flat, temp_extract_path)
+            else:
+                print(f"✅ No duplicate folder found, structure is flat")
 
             # Clean macOS system files
+            print(f"🧹 Cleaning macOS system files from: {temp_extract_path}")
             clean_macos_files(temp_extract_path)
 
             # Validate structure
+            print(f"🔍 Validating structure for recording: {zip_top}")
             is_valid, validation_errors = self.validation_service.validate_structure(temp_extract_path, zip_top)
             
             if not is_valid:
+                print(f"❌ Validation failed: {validation_errors}")
                 prog["status"] = "error"
                 prog["error_msg"] = "Invalid archive structure."
                 prog["error_details"] = validation_errors
                 self.redis_service.set_extraction_progress(job_id, prog)
                 return
+            
+            print(f"✅ Validation passed")
 
             # Atomic move to final location
             final_path = os.path.join(final_root, zip_top)
             
             if os.path.exists(final_path):
+                print(f"❌ Recording already exists at: {final_path}")
                 prog["status"] = "error"
                 prog["error_msg"] = f"Recording with ID '{zip_top}' already exists."
                 self.redis_service.set_extraction_progress(job_id, prog)
                 return
 
+            print(f"📦 Moving to final location: {final_path}")
             shutil.move(temp_extract_path, final_path)
 
             # Create initial status file
+            print(f"📝 Creating status file")
             create_status_file(final_path, "validated", "Upload and validation successful, awaiting processing.")
 
             # Calculate size and mark as done
@@ -185,14 +202,17 @@ class ExtractionService:
             prog["status"] = "done"
             self.redis_service.set_extraction_progress(job_id, prog)
             
+            print(f"✅ Extraction complete! recording_id: {zip_top}, size: {size_bytes} bytes")
             return zip_top
 
         except zipfile.BadZipFile:
+            print(f"❌ BadZipFile error")
             prog["status"] = "error"
             prog["error_msg"] = "Uploaded file is not a valid ZIP archive."
             self.redis_service.set_extraction_progress(job_id, prog)
 
         except Exception as e:
+            print(f"❌ Extraction error: {type(e).__name__}: {str(e)}")
             prog["status"] = "error"
             prog["error_msg"] = f"Error during extraction: {str(e)}"
             self.redis_service.set_extraction_progress(job_id, prog)
@@ -200,16 +220,20 @@ class ExtractionService:
         finally:
             # Cleanup on error
             if prog.get("status") != "done":
+                print(f"🧹 Cleanup triggered - status: {prog.get('status')}")
                 try:
                     if zip_path and os.path.isfile(zip_path):
+                        print(f"🗑️ Removing ZIP file: {zip_path}")
                         os.remove(zip_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    print(f"⚠️ Failed to remove ZIP: {e}")
 
                 try:
                     if temp_extract_path and os.path.isdir(temp_extract_path):
+                        print(f"🗑️ Removing temp folder: {temp_extract_path}")
                         shutil.rmtree(temp_extract_path)
-                except OSError:
-                    pass
+                except OSError as e:
+                    print(f"⚠️ Failed to remove temp folder: {e}")
         
+        print(f"❌ extract_archive returning None")
         return None
