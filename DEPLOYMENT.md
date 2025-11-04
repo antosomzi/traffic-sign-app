@@ -58,7 +58,7 @@ The `.env` file should already exist with the correct password. If not:
 ```bash
 cat > .env <<EOF
 REDIS_PASSWORD=Moulines1
-FLASK_ENV=production
+USE_GPU_INSTANCE=True
 EOF
 ```
 

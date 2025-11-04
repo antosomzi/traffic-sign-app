@@ -14,7 +14,6 @@ Web application for uploading, validating, and asynchronously processing traffic
 - [Installation](#-installation)
 - [Usage](#-usage)
 - [Expected Input Data Structure](#-expected-input-data-structure)
-- [Configuration](#-configuration)
 - [Security](#-security)
 
 ## 🏗️ Architecture
@@ -26,22 +25,10 @@ Web application for uploading, validating, and asynchronously processing traffic
 - **Celery**: Asynchronous worker for ML pipeline processing
 - **Gunicorn**: Production WSGI server with 4 worker processes
 
-### Multi-Worker Architecture
-
-Production uses **Gunicorn with 4 workers**. Since each worker has separate memory, Redis ensures extraction progress is shared across all workers:
-
-```
-Request 1 (Upload) → Worker #1 → Stores progress in Redis
-Request 2 (Status) → Worker #3 → Reads progress from Redis ✅
-Request 3 (Status) → Worker #2 → Reads progress from Redis ✅
-```
-
-Without Redis, status checks would return 404 when handled by different workers.
-
 ### Execution Modes
 
 Toggle via `USE_GPU_INSTANCE` environment variable:
-- **Local mode** (default): Runs pipeline on the same instance
+- **Local mode** (default): Runs a local fake pipeline 
 - **GPU mode**: Launches AWS EC2 GPU instance, executes via SSH, auto-stops after completion
 
 For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
@@ -169,6 +156,18 @@ sudo systemctl start redis
 chmod +x simulate_pipeline.sh start_gunicorn.sh
 ```
 
+**6. Configure environment (optional)**
+
+Create a `.env` file for custom configuration:
+
+```bash
+# Redis password (required for production)
+REDIS_PASSWORD=your_password_here
+
+# Execution mode (local or GPU instance)
+USE_GPU_INSTANCE=false
+```
+
 ### Running Locally (Development)
 
 Open **3 terminals**:
@@ -230,24 +229,7 @@ recording_id/
 - macOS system files (`__MACOSX/`, `.DS_Store`, `._*`) are automatically removed
 - Structure validation is strict – only the above folders/files are required
 
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file (optional for local development):
-
-```bash
-# Redis password (required for production)
-REDIS_PASSWORD=your_password_here
-
-# Execution mode (local or GPU instance)
-USE_GPU_INSTANCE=false
-
-# Flask environment
-FLASK_ENV=production
-```
-
-## � Security
+## 🔒 Security
 
 - **ZipSlip protection**: Validates file paths during extraction
 - **Strict validation**: Enforces expected folder structure
