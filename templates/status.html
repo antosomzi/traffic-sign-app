@@ -62,21 +62,43 @@
         .recording-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             margin-bottom: 15px;
             flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .recording-header-left {
+            flex: 1;
+        }
+
+        .recording-header-right {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
         }
 
         .recording-id {
             font-size: 18px;
             font-weight: 600;
             color: #333;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .recording-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+            flex-wrap: wrap;
         }
 
         .timestamp {
             font-size: 12px;
             color: #888;
-            margin-top: 5px;
         }
 
         .status-badge {
@@ -175,6 +197,31 @@
             transform: none;
         }
 
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            line-height: 1;
+        }
+
+        .delete-btn:hover:not(:disabled) {
+            background: #c82333;
+            transform: scale(1.05);
+        }
+
+        .delete-btn:disabled {
+            background: #e9ecef;
+            color: #adb5bd;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -215,25 +262,37 @@
             {% for rec in recordings %}
             <div class="recording-card">
                 <div class="recording-header">
-                    <div>
-                        <div class="rechording-id">🎥 {{ rec.id }}</div>
+                    <div class="recording-header-left">
+                        <div class="recording-id">
+                            <span>🎥 {{ rec.id }}</span>
+                            <span class="status-badge {{ rec.status }}">
+                                {% if rec.status == "completed" %}
+                                    ✅ Completed
+                                {% elif rec.status == "processing" %}
+                                    ⏳ In Progress
+                                {% elif rec.status == "validated" %}
+                                    📋 Validated
+                                {% elif rec.status == "error" %}
+                                    ❌ Error
+                                {% else %}
+                                    {{ rec.status }}
+                                {% endif %}
+                            </span>
+                        </div>
                         {% if rec.timestamp %}
                         <div class="timestamp">📅 {{ rec.timestamp[:19].replace('T', ' ') }}</div>
                         {% endif %}
                     </div>
-                    <span class="status-badge {{ rec.status }}">
-                        {% if rec.status == "completed" %}
-                            ✅ Completed
-                        {% elif rec.status == "processing" %}
-                            ⏳ In Progress
-                        {% elif rec.status == "validated" %}
-                            📋 Validated
-                        {% elif rec.status == "error" %}
-                            ❌ Error
-                        {% else %}
-                            {{ rec.status }}
-                        {% endif %}
-                    </span>
+                    <div class="recording-header-right">
+                        <button 
+                            class="delete-btn" 
+                            onclick="deleteRecording('{{ rec.id }}')"
+                            {% if rec.status == "processing" or rec.status == "validated" %}disabled{% endif %}
+                            title="{% if rec.status == 'processing' or rec.status == 'validated' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
+                        >
+                            ×
+                        </button>
+                    </div>
                 </div>
 
                 {% if rec.message %}
@@ -275,6 +334,69 @@
             setTimeout(() => {
                 location.reload();
             }, 2000);
+        }
+
+        // Delete recording function with confirmation
+        async function deleteRecording(recordingId) {
+            // Confirmation popup
+            const confirmed = confirm(
+                `Are you sure you want to delete recording "${recordingId}"?\n\n` +
+                `This action cannot be undone and will permanently delete:\n` +
+                `• All recording files\n` +
+                `• Processing results\n` +
+                `• Associated uploads`
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                // Show loading state (optional)
+                const deleteBtn = event.target;
+                const originalText = deleteBtn.innerHTML;
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '⏳ Deleting...';
+
+                // Send DELETE request
+                const response = await fetch(`/delete/${recordingId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Success: remove the card with animation
+                    const card = deleteBtn.closest('.recording-card');
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.95)';
+                    card.style.transition = 'all 0.3s ease';
+                    
+                    setTimeout(() => {
+                        card.remove();
+                        
+                        // Check if no recordings left
+                        const remainingCards = document.querySelectorAll('.recording-card');
+                        if (remainingCards.length === 0) {
+                            location.reload(); // Show empty state
+                        }
+                    }, 300);
+                } else {
+                    // Error: show message and restore button
+                    alert(`Error: ${result.message}`);
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                // Network error
+                alert(`Failed to delete recording: ${error.message}`);
+                const deleteBtn = event.target;
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = '🗑️ Delete';
+            }
         }
     </script>
 </body>

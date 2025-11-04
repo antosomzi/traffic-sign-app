@@ -10,7 +10,7 @@ Refactored modular architecture with:
 
 from flask import Flask
 from config import Config
-from routes import upload_bp, status_bp, download_bp
+from routes import upload_bp, status_bp, download_bp, delete_bp
 
 
 def create_app(config_class=Config):
@@ -33,6 +33,7 @@ def create_app(config_class=Config):
     app.register_blueprint(upload_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(download_bp)
+    app.register_blueprint(delete_bp)
     
     return app
 
