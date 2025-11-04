@@ -8,14 +8,14 @@ Web application for uploading, validating, and asynchronously processing traffic
 ## 📑 Table of Contents
 
 - [Architecture](#-architecture)
-- [Features](#-features)
+- [Data Flow](#-flow)
 - [Project Structure](#-project-structure)
+- [File Storage Structure](#-file-storage-structure)
 - [Installation](#-installation)
 - [Usage](#-usage)
-- [Expected Data Structure](#-expected-data-structure)
+- [Expected Input Data Structure](#-expected-input-data-structure)
 - [Configuration](#-configuration)
 - [Security](#-security)
-- [Technology Stack](#-technology-stack)
 
 ## 🏗️ Architecture
 
@@ -92,7 +92,38 @@ app/
 └── temp_extracts/             # Temporary extraction folder
 ```
 
-## 🚀 Installation
+## � File Storage Structure
+
+**Production paths** (on EC2 main instance):
+```
+/home/ec2-user/
+├── uploads/              # Uploaded ZIP files (persistent storage)
+│   └── <uuid>_<recording_id>.zip
+├── recordings/           # Extracted and validated recordings
+│   └── <recording_id>/
+│       ├── status.json   # Processing status tracking
+│       ├── result_pipeline_stable/  # ML pipeline outputs
+│       └── <device_id>/  # Original recording data
+├── temp_extracts/        # Temporary extraction during validation
+│   └── <job_id>/         # Cleaned up after validation
+└── app/                  # Application files
+```
+
+**Local development paths**:
+```
+app/
+├── uploads/              # Uploaded ZIP files
+├── recordings/           # Validated recordings
+└── temp_extracts/        # Temporary extraction
+```
+
+**Storage notes:**
+- `uploads/` folder stores all uploaded ZIP files until manually deleted
+- EFS-mounted filesystem (`/home/ec2-user`) enables GPU instance to access recordings
+- `.gitignore` excludes all data folders from version control
+- Automatic cleanup removes `__MACOSX/`, `.DS_Store`, `._*` files during extraction
+
+## �🚀 Installation
 
 ### Prerequisites
 
