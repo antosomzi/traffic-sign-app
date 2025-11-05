@@ -62,19 +62,46 @@ def delete_recording(recording_id: str) -> Dict[str, any]:
     recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
     
     try:
-        # Delete the recording folder
+        # Delete the recording folder with permission error handling
         if os.path.exists(recording_path):
-            shutil.rmtree(recording_path)
+            try:
+                # First attempt: normal deletion
+                shutil.rmtree(recording_path)
+            except PermissionError:
+                # Second attempt: use sudo to fix ownership then delete
+                try:
+                    import subprocess
+                    # Fix ownership with sudo (requires sudoers configuration)
+                    subprocess.run(
+                        ["sudo", "chown", "-R", "ec2-user:ec2-user", recording_path],
+                        check=True,
+                        capture_output=True
+                    )
+                    # Try deletion again
+                    shutil.rmtree(recording_path)
+                except subprocess.CalledProcessError as sudo_error:
+                    return {
+                        "success": False,
+                        "message": f"Permission denied. Please run manually: sudo chown -R ec2-user:ec2-user {recording_path} && sudo rm -rf {recording_path}",
+                        "recording_id": recording_id
+                    }
+                except Exception as chmod_error:
+                    return {
+                        "success": False,
+                        "message": f"Permission denied: {str(chmod_error)}",
+                        "recording_id": recording_id
+                    }
         
         # Optionally delete the uploaded ZIP file (if you want to keep it, remove this)
         uploads_folder = Config.UPLOAD_FOLDER
-        for filename in os.listdir(uploads_folder):
-            if recording_id in filename:
-                zip_path = os.path.join(uploads_folder, filename)
-                try:
-                    os.remove(zip_path)
-                except Exception:
-                    pass  # Not critical if ZIP removal fails
+        if os.path.exists(uploads_folder):
+            for filename in os.listdir(uploads_folder):
+                if recording_id in filename:
+                    zip_path = os.path.join(uploads_folder, filename)
+                    try:
+                        os.remove(zip_path)
+                    except Exception:
+                        pass  # Not critical if ZIP removal fails
         
         return {
             "success": True,
