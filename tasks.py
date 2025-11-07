@@ -53,7 +53,9 @@ def run_pipeline_local(recording_id, recording_path):
         elapsed += 10
 
     if not os.path.isfile(export_csv):
-        update_status(recording_path, "error", "Timeout: processing took too long.")
+        # Friendly message for no signs detected or timeout
+        user_friendly_message = "No traffic signs detected in this recording. The video may not contain any recognizable traffic signs or the recording quality may be insufficient."
+        update_status(recording_path, "error", user_friendly_message)
         raise TimeoutError(f"Pipeline timeout for {recording_id}")
 
     update_status(recording_path, "completed", "Processing completed successfully.")
@@ -80,8 +82,14 @@ def run_pipeline_gpu(recording_id, recording_path):
     export_csv = os.path.join(recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv")
     print(f"[VALIDATION] Checking for output file: {export_csv}")
     if not os.path.isfile(export_csv):
-        update_status(recording_path, "error", "Pipeline completed but output file not found.")
-        raise FileNotFoundError(f"Expected output file not found: {export_csv}")
+        # Check if this is a "no signs detected" case
+        error_message = f"Expected output file not found: {export_csv}"
+        
+        # Friendly message for no signs detected
+        user_friendly_message = "No traffic signs detected in this recording. The video may not contain any recognizable traffic signs or the recording quality may be insufficient."
+        
+        update_status(recording_path, "error", user_friendly_message)
+        raise FileNotFoundError(error_message)
 
     print(f"✅ Output file validated")
     update_status(recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}")

@@ -139,7 +139,22 @@
             color: #666;
             font-size: 14px;
             margin-bottom: 15px;
-            font-style: italic;
+            padding: 12px;
+            border-radius: 6px;
+            background: #f8f9fa;
+            border-left: 4px solid #6c757d;
+        }
+
+        .status-message.error {
+            background: #fff3cd;
+            color: #856404;
+            border-left-color: #ffc107;
+        }
+
+        .status-message.error strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 15px;
         }
 
         .steps-container {
@@ -296,7 +311,12 @@
                 </div>
 
                 {% if rec.message %}
-                <div class="status-message">{{ rec.message }}</div>
+                <div class="status-message {% if rec.status == 'error' %}error{% endif %}">
+                    {% if rec.status == 'error' %}
+                        <strong>⚠️ Processing Issue:</strong>
+                    {% endif %}
+                    {{ rec.message }}
+                </div>
                 {% endif %}
 
                 {% if rec.show_steps and rec.steps %}

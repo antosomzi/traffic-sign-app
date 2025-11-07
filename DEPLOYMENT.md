@@ -69,7 +69,27 @@ chmod +x simulate_pipeline.sh
 chmod +x start_gunicorn.sh
 ```
 
-### 7. Create systemd Services
+### 7. Configure sudoers for Recording Deletion
+
+**Why is this needed?**  
+When the ML pipeline runs (especially on GPU instance), it may create files as `root` user. This prevents the Flask application (running as `ec2-user`) from deleting these recordings through the web interface.
+
+**Solution:** Grant `ec2-user` limited sudo privileges to manage recordings ownership and deletion.
+
+```bash
+# Edit sudoers file safely
+sudo visudo
+```
+
+**Add these lines at the end of the file:**
+
+```bash
+# Allow ec2-user to manage recordings ownership and deletion without password
+ec2-user ALL=(ALL) NOPASSWD: /bin/chown -R ec2-user\:ec2-user /home/ec2-user/recordings/*
+ec2-user ALL=(ALL) NOPASSWD: /bin/rm -rf /home/ec2-user/recordings/*
+```
+
+### 8. Create systemd Services
 
 **What is systemd?**  
 systemd is Linux's service manager. It ensures your application:
@@ -367,7 +387,36 @@ chmod 755 /home/ec2-user/app
 chmod 755 /home/ec2-user/app/uploads
 chmod 755 /home/ec2-user/app/recordings
 chmod 755 /home/ec2-user/app/temp_extracts
+
+# Fix ownership of recordings (especially if pipeline created files as root)
+sudo chown -R ec2-user:ec2-user /home/ec2-user/recordings/
+
+# Verify ownership
+ls -la /home/ec2-user/recordings/
+# All files should show "ec2-user ec2-user"
 ```
+
+### Recording Deletion Issues
+
+If you encounter "Permission denied" when deleting recordings through the web interface:
+
+```bash
+# Check who owns the files
+ls -la /home/ec2-user/recordings/<recording_id>/result_pipeline_stable/
+
+# If files are owned by root, fix the ownership
+sudo chown -R ec2-user:ec2-user /home/ec2-user/recordings/
+
+# Verify sudoers is configured correctly
+sudo -l -U ec2-user
+# Should show the chown and rm commands for /home/ec2-user/recordings/*
+
+# Test deletion manually
+sudo rm -rf /home/ec2-user/recordings/test_recording
+# Should work without password prompt
+```
+
+**Note:** The application will automatically attempt to use `sudo chown` when encountering permission errors during deletion, but this requires the sudoers configuration from step 7.
 
 ## Performance Tuning
 
