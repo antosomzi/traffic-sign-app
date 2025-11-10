@@ -53,10 +53,12 @@ def run_pipeline_local(recording_id, recording_path):
         elapsed += 10
 
     if not os.path.isfile(export_csv):
-        # Friendly message for no signs detected or timeout
+        # Friendly message for no signs detected (instead of timeout error)
         user_friendly_message = "No traffic signs detected in this recording. The video may not contain any recognizable traffic signs or the recording quality may be insufficient."
         update_status(recording_path, "error", user_friendly_message)
-        raise TimeoutError(f"Pipeline timeout for {recording_id}")
+        
+        # Raise with technical details for logging
+        raise TimeoutError(f"Pipeline timeout - expected output file not found: {export_csv}")
 
     update_status(recording_path, "completed", "Processing completed successfully.")
     
@@ -76,20 +78,19 @@ def run_pipeline_gpu(recording_id, recording_path):
         raise Exception(f"GPU pipeline failed: {message}")
 
     # Wait for NFS cache sync and verify output
-    print(f"[VALIDATION] Waiting 6s for NFS cache synchronization (acregmin=3s)...")
+    print(f"[VALIDATION] Waiting 60s for NFS cache synchronization (acregmin=3s)...")
     time.sleep(60)
 
     export_csv = os.path.join(recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv")
     print(f"[VALIDATION] Checking for output file: {export_csv}")
+    
     if not os.path.isfile(export_csv):
-        # Check if this is a "no signs detected" case
-        error_message = f"Expected output file not found: {export_csv}"
-        
-        # Friendly message for no signs detected
+        # Friendly message for no signs detected (instead of technical error path)
         user_friendly_message = "No traffic signs detected in this recording. The video may not contain any recognizable traffic signs or the recording quality may be insufficient."
-        
         update_status(recording_path, "error", user_friendly_message)
-        raise FileNotFoundError(error_message)
+        
+        # Raise with technical details for logging, but user sees friendly message
+        raise FileNotFoundError(f"Expected output file not found: {export_csv}")
 
     print(f"✅ Output file validated")
     update_status(recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}")
