@@ -124,7 +124,14 @@ def run_pipeline_task(recording_id):
         update_status(recording_path, "error", f"Pipeline execution error: {str(e)}")
         raise
 
+    except (FileNotFoundError, TimeoutError) as e:
+        # These exceptions already have user-friendly messages written to status.json
+        # Don't overwrite them - just log and re-raise
+        print(f"[INFO] Expected error handled with user-friendly message: {type(e).__name__}")
+        raise
+
     except Exception as e:
+        # Only update status for truly unexpected errors
         update_status(recording_path, "error", f"Unexpected error: {str(e)}")
         raise
 

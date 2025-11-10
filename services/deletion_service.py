@@ -3,6 +3,8 @@
 import os
 import shutil
 import json
+import subprocess
+import stat
 from typing import Dict, Tuple
 from config import Config
 
@@ -68,29 +70,56 @@ def delete_recording(recording_id: str) -> Dict[str, any]:
                 # First attempt: normal deletion
                 shutil.rmtree(recording_path)
             except PermissionError:
-                # Second attempt: use sudo to fix ownership then delete
+                # Second attempt: fix ownership with sudo (production only)
+                print(f"[DELETE] Permission denied, attempting sudo chown for {recording_id}")
+                
+                # Use absolute path to sudo (works on both Linux and Mac)
+                sudo_path = '/usr/bin/sudo'
+                if not os.path.exists(sudo_path):
+                    # Fallback for systems where sudo is elsewhere
+                    sudo_path = 'sudo'
+                
                 try:
-                    import subprocess
-                    # Fix ownership with sudo (requires sudoers configuration)
+                    # Fix ownership to current user
                     subprocess.run(
-                        ["sudo", "chown", "-R", "ec2-user:ec2-user", recording_path],
+                        [sudo_path, 'chown', '-R', 'ec2-user:ec2-user', recording_path],
                         check=True,
-                        capture_output=True
+                        capture_output=True,
+                        text=True
                     )
-                    # Try deletion again
+                    # Retry deletion
                     shutil.rmtree(recording_path)
-                except subprocess.CalledProcessError as sudo_error:
+                except subprocess.CalledProcessError as e:
                     return {
                         "success": False,
-                        "message": f"Permission denied. Please run manually: sudo chown -R ec2-user:ec2-user {recording_path} && sudo rm -rf {recording_path}",
+                        "message": f"Failed to fix ownership: {e.stderr}",
                         "recording_id": recording_id
                     }
-                except Exception as chmod_error:
-                    return {
-                        "success": False,
-                        "message": f"Permission denied: {str(chmod_error)}",
-                        "recording_id": recording_id
-                    }
+                except FileNotFoundError:
+                    # sudo not found - try manual permission fix
+                    print(f"[DELETE] sudo not available, attempting manual permission fix")
+                    try:
+                        for root, dirs, files in os.walk(recording_path, topdown=False):
+                            for name in files:
+                                filepath = os.path.join(root, name)
+                                try:
+                                    os.chmod(filepath, stat.S_IWUSR | stat.S_IRUSR)
+                                except:
+                                    pass
+                            for name in dirs:
+                                dirpath = os.path.join(root, name)
+                                try:
+                                    os.chmod(dirpath, stat.S_IWUSR | stat.S_IRUSR | stat.S_IXUSR)
+                                except:
+                                    pass
+                        # Final retry
+                        shutil.rmtree(recording_path)
+                    except Exception as chmod_error:
+                        return {
+                            "success": False,
+                            "message": f"Permission denied: {str(chmod_error)}",
+                            "recording_id": recording_id
+                        }
         
         # Optionally delete the uploaded ZIP file (if you want to keep it, remove this)
         uploads_folder = Config.UPLOAD_FOLDER
