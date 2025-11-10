@@ -301,7 +301,7 @@
                     <div class="recording-header-right">
                         <button 
                             class="delete-btn" 
-                            onclick="deleteRecording('{{ rec.id }}', this)"
+                            data-recording-id="{{ rec.id }}"
                             {% if rec.status == "processing" or rec.status == "validated" %}disabled{% endif %}
                             title="{% if rec.status == 'processing' or rec.status == 'validated' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
                         >
@@ -361,10 +361,21 @@
             }, 10000);
         }
 
+        function cancelAutoRefresh() {
+            if (autoRefreshTimeoutId !== null) {
+                clearTimeout(autoRefreshTimeoutId);
+                autoRefreshTimeoutId = null;
+            }
+        }
+
         scheduleAutoRefresh();
 
-        // Delete recording function with confirmation
-        async function deleteRecording(recordingId, buttonElement) {
+        async function handleDeleteClick(event) {
+            event.preventDefault();
+
+            const deleteBtn = event.currentTarget;
+            const recordingId = deleteBtn.dataset.recordingId;
+
             // Confirmation popup
             const confirmed = confirm(
                 `Are you sure you want to delete recording "${recordingId}"?\n\n` +
@@ -378,12 +389,7 @@
                 return;
             }
 
-            if (autoRefreshTimeoutId !== null) {
-                clearTimeout(autoRefreshTimeoutId);
-                autoRefreshTimeoutId = null;
-            }
-
-            const deleteBtn = buttonElement;
+            cancelAutoRefresh();
             const originalText = deleteBtn.innerHTML;
 
             try {
@@ -395,7 +401,7 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
 
-                const response = await fetch(`/delete/${recordingId}`, {
+                const response = await fetch(`/delete/${encodeURIComponent(recordingId)}`, {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json'
@@ -405,13 +411,23 @@
 
                 clearTimeout(timeoutId);
 
-                // Check if response is OK before parsing JSON
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                let result = null;
+                try {
+                    result = await response.json();
+                } catch (jsonError) {
+                    // Keep result as null if response has no JSON body
                 }
 
-                const result = await response.json();
+                if (!response.ok) {
+                    const serverMessage = result && result.message ? `: ${result.message}` : `: ${response.statusText}`;
+                    throw new Error(`HTTP ${response.status}${serverMessage}`);
+                }
 
+                if (!result || typeof result !== 'object') {
+                    throw new Error('Unexpected response format from server.');
+                }
+
+                // Success response from API
                 if (result.success) {
                     // Success: remove the card with animation
                     const card = deleteBtn.closest('.recording-card');
@@ -430,7 +446,7 @@
                     }, 300);
                 } else {
                     // Error: show message and restore button
-                    alert(`Error: ${result.message}`);
+                    alert(`Error: ${result.message || 'Unknown error'}`);
                     deleteBtn.disabled = false;
                     deleteBtn.innerHTML = originalText;
                 }
@@ -441,7 +457,7 @@
                 if (error.name === 'AbortError') {
                     alert('Deletion is taking longer than expected. Please refresh the page to see if it completed successfully.');
                 } else {
-                    alert(`Failed to delete recording: ${error.message}`);
+                    alert(`Failed to delete recording: ${error.message || error}`);
                 }
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = originalText;
@@ -449,6 +465,11 @@
                 scheduleAutoRefresh();
             }
         }
+
+        // Attach click handlers to delete buttons after DOM is ready
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.addEventListener('click', handleDeleteClick);
+        });
     </script>
 </body>
 </html>
