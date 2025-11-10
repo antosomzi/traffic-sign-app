@@ -372,19 +372,30 @@
             }
 
             try {
-                // Show loading state (optional)
+                // Show loading state
                 const deleteBtn = event.target;
                 const originalText = deleteBtn.innerHTML;
                 deleteBtn.disabled = true;
                 deleteBtn.innerHTML = '⏳ Deleting...';
 
-                // Send DELETE request
+                // Send DELETE request with increased timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
+
                 const response = await fetch(`/delete/${recordingId}`, {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId);
+
+                // Check if response is OK before parsing JSON
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
 
                 const result = await response.json();
 
@@ -411,11 +422,18 @@
                     deleteBtn.innerHTML = originalText;
                 }
             } catch (error) {
-                // Network error
-                alert(`Failed to delete recording: ${error.message}`);
+                // Network or timeout error
+                console.error('Delete error:', error);
+                
+                if (error.name === 'AbortError') {
+                    alert('Deletion is taking longer than expected. Please refresh the page to see if it completed successfully.');
+                } else {
+                    alert(`Failed to delete recording: ${error.message}`);
+                }
+                
                 const deleteBtn = event.target;
                 deleteBtn.disabled = false;
-                deleteBtn.innerHTML = '🗑️ Delete';
+                deleteBtn.innerHTML = originalText;
             }
         }
     </script>
