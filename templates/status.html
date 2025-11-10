@@ -299,17 +299,14 @@
                         {% endif %}
                     </div>
                     <div class="recording-header-right">
-                        <button 
-                            class="delete-btn" 
+                        <button
+                            class="delete-btn"
                             data-recording-id="{{ rec.id }}"
-                            {% if rec.status == "processing" or rec.status == "validated" %}disabled{% endif %}
-                            title="{% if rec.status == 'processing' or rec.status == 'validated' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
+                            {% if rec.status == "processing" %}disabled{% endif %}
+                            title="{% if rec.status == 'processing' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
                         >
                             ×
                         </button>
-                    </div>
-                </div>
-
                 {% if rec.message %}
                 <div class="status-message {% if rec.status == 'error' %}error{% endif %}">
                     {% if rec.status == 'error' %}
@@ -345,9 +342,12 @@
         {% endif %}
     </div>
 
+    <script id="recordings-data" type="application/json">{{ recordings|tojson|safe }}</script>
+
     <script>
         // Auto-refresh every 10 seconds if processing is in progress
-        const recordings = {{ recordings|tojson|safe }};
+        const recordingsDataEl = document.getElementById('recordings-data');
+        const recordings = recordingsDataEl ? JSON.parse(recordingsDataEl.textContent) : [];
         const hasProcessing = recordings.some(r => r.status === 'processing' || r.status === 'validated');
         let autoRefreshTimeoutId = null;
 

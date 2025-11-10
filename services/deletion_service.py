@@ -30,12 +30,19 @@ def can_delete_recording(recording_id: str) -> Tuple[bool, str]:
         try:
             with open(status_file, "r") as f:
                 status_data = json.load(f)
-                current_status = status_data.get("status", "validated")
-                
-                # Block deletion if processing or validated (about to process)
-                if current_status in ["processing", "validated"]:
-                    return False, f"Cannot delete: recording is currently {current_status}"
-        except Exception as e:
+                current_status = status_data.get("status", "")
+
+                if current_status == "processing":
+                    final_result = os.path.join(
+                        recording_path,
+                        "result_pipeline_stable",
+                        "s7_export_csv",
+                        "supports.csv"
+                    )
+
+                    if not os.path.isfile(final_result):
+                        return False, "Cannot delete: recording is currently processing"
+        except Exception:
             # If we can't read status, assume it's safe to delete
             pass
     
