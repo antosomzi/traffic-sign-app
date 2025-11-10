@@ -301,7 +301,7 @@
                     <div class="recording-header-right">
                         <button 
                             class="delete-btn" 
-                            onclick="deleteRecording('{{ rec.id }}')"
+                            onclick="deleteRecording('{{ rec.id }}', this)"
                             {% if rec.status == "processing" or rec.status == "validated" %}disabled{% endif %}
                             title="{% if rec.status == 'processing' or rec.status == 'validated' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
                         >
@@ -349,15 +349,22 @@
         // Auto-refresh every 10 seconds if processing is in progress
         const recordings = {{ recordings|tojson|safe }};
         const hasProcessing = recordings.some(r => r.status === 'processing' || r.status === 'validated');
-        
-        if (hasProcessing) {
-            setTimeout(() => {
+        let autoRefreshTimeoutId = null;
+
+        function scheduleAutoRefresh() {
+            if (!hasProcessing) {
+                return;
+            }
+
+            autoRefreshTimeoutId = window.setTimeout(() => {
                 location.reload();
-            }, 2000);
+            }, 10000);
         }
 
+        scheduleAutoRefresh();
+
         // Delete recording function with confirmation
-        async function deleteRecording(recordingId) {
+        async function deleteRecording(recordingId, buttonElement) {
             // Confirmation popup
             const confirmed = confirm(
                 `Are you sure you want to delete recording "${recordingId}"?\n\n` +
@@ -371,10 +378,16 @@
                 return;
             }
 
+            if (autoRefreshTimeoutId !== null) {
+                clearTimeout(autoRefreshTimeoutId);
+                autoRefreshTimeoutId = null;
+            }
+
+            const deleteBtn = buttonElement;
+            const originalText = deleteBtn.innerHTML;
+
             try {
                 // Show loading state
-                const deleteBtn = event.target;
-                const originalText = deleteBtn.innerHTML;
                 deleteBtn.disabled = true;
                 deleteBtn.innerHTML = '⏳ Deleting...';
 
@@ -430,10 +443,10 @@
                 } else {
                     alert(`Failed to delete recording: ${error.message}`);
                 }
-                
-                const deleteBtn = event.target;
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = originalText;
+            } finally {
+                scheduleAutoRefresh();
             }
         }
     </script>
