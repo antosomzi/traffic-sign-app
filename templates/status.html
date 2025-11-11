@@ -212,6 +212,35 @@
             transform: none;
         }
 
+        .rerun-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 9999px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rerun-btn:hover:not(:disabled) {
+            background: #2563eb;
+            transform: scale(1.05);
+        }
+
+        .rerun-btn:disabled {
+            background: #dbeafe;
+            color: #94a3b8;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .delete-btn {
             background: #dc3545;
             color: white;
@@ -300,6 +329,14 @@
                     </div>
                     <div class="recording-header-right">
                         <button
+                            class="rerun-btn"
+                            data-recording-id="{{ rec.id }}"
+                            {% if rec.status == "processing" %}disabled{% endif %}
+                            title="{% if rec.status == 'processing' %}Cannot re-run while processing{% else %}Re-run pipeline for this recording{% endif %}"
+                        >
+                            ↻
+                        </button>
+                        <button
                             class="delete-btn"
                             data-recording-id="{{ rec.id }}"
                             {% if rec.status == "processing" %}disabled{% endif %}
@@ -371,6 +408,61 @@
         }
 
         scheduleAutoRefresh();
+
+        async function handleRerunClick(event) {
+            event.preventDefault();
+
+            const rerunBtn = event.currentTarget;
+            const recordingId = rerunBtn.dataset.recordingId;
+            const originalText = rerunBtn.innerHTML;
+
+            const confirmed = confirm(
+                `Re-run the pipeline for recording "${recordingId}"?\n\n` +
+                `This will queue the processing stages again. Existing results will be overwritten when the pipeline completes.`
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            cancelAutoRefresh();
+
+            try {
+                rerunBtn.disabled = true;
+
+                const response = await fetch(`/rerun/${encodeURIComponent(recordingId)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                let result = null;
+                try {
+                    result = await response.json();
+                } catch (jsonError) {
+                    result = null;
+                }
+
+                if (!response.ok) {
+                    const serverMessage = result && result.message ? `: ${result.message}` : `: ${response.statusText}`;
+                    throw new Error(`HTTP ${response.status}${serverMessage}`);
+                }
+
+                if (!result || !result.success) {
+                    throw new Error(result && result.message ? result.message : 'Failed to queue pipeline re-run.');
+                }
+
+                setTimeout(() => {
+                    location.reload();
+                }, 200);
+            } catch (error) {
+                alert(`Failed to re-run pipeline: ${error.message || error}`);
+                rerunBtn.disabled = false;
+                rerunBtn.innerHTML = originalText;
+                scheduleAutoRefresh();
+            }
+        }
 
         async function handleDeleteClick(event) {
             event.preventDefault();
@@ -471,6 +563,10 @@
         // Attach click handlers to delete buttons after DOM is ready
         document.querySelectorAll('.delete-btn').forEach(button => {
             button.addEventListener('click', handleDeleteClick);
+        });
+
+        document.querySelectorAll('.rerun-btn').forEach(button => {
+            button.addEventListener('click', handleRerunClick);
         });
     </script>
 </body>

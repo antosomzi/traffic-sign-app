@@ -2,6 +2,7 @@
 
 import os
 import json
+from datetime import datetime
 from flask import Blueprint, render_template, current_app
 from config import Config
 
@@ -50,46 +51,72 @@ def status():
             except:
                 pass
 
-        # Check if processing is complete
+        # Check if processing outputs exist
         result_root = os.path.join(rec_folder, "result_pipeline_stable")
+        has_results = os.path.isdir(result_root)
+        step_status = []
         is_completed = False
         show_steps = False
-        step_status = []
-        
-        if os.path.isdir(result_root):
+
+        if has_results:
             final_output = os.path.join(result_root, "s7_export_csv", "supports.csv")
             is_completed = os.path.isfile(final_output)
-            
-            # If processing, show steps
-            if current_status == "processing" and not is_completed:
-                show_steps = True
-                for step in STEP_NAMES:
-                    step_folder = os.path.join(result_root, step)
-                    
-                    if step == "s7_export_csv":
-                        output_file = os.path.join(step_folder, "supports.csv")
+
+        # Determine when the current processing run started (status timestamp)
+        run_started_at = None
+        if current_status == "processing" and timestamp:
+            try:
+                run_started_at = datetime.fromisoformat(timestamp).timestamp()
+            except ValueError:
+                run_started_at = None
+
+        # Build step progress when processing
+        if current_status == "processing":
+            show_steps = True
+            for step in STEP_NAMES:
+                step_folder = os.path.join(result_root, step)
+
+                if step == "s7_export_csv":
+                    output_file = os.path.join(step_folder, "supports.csv")
+                else:
+                    output_file = os.path.join(step_folder, "output.json")
+
+                done_flag = False
+                if os.path.isfile(output_file):
+                    if run_started_at is None:
+                        done_flag = True
                     else:
-                        output_file = os.path.join(step_folder, "output.json")
+                        try:
+                            done_flag = os.path.getmtime(output_file) >= run_started_at
+                        except OSError:
+                            done_flag = False
 
-                    done_flag = os.path.isfile(output_file)
-                    step_status.append({
-                        "name": step,
-                        "done": done_flag
-                    })
+                step_status.append({
+                    "name": step,
+                    "done": done_flag
+                })
 
-        # Determine display status
-        if is_completed:
-            display_status = "completed"
-            display_message = "Processing completed successfully"
-        elif current_status == "processing":
+        # Determine display status prioritizing the explicit status.json value
+        if current_status == "processing":
             display_status = "processing"
             display_message = status_message or "Processing in progress..."
         elif current_status == "error":
             display_status = "error"
             display_message = status_message or "Error during processing"
-        else:  # validated
+        elif current_status == "completed":
+            display_status = "completed"
+            display_message = status_message or "Processing completed successfully"
+        elif current_status == "validated":
             display_status = "validated"
             display_message = status_message or "Awaiting processing"
+        else:
+            # Fallback to inferred completion when status.json is missing or unexpected
+            if is_completed:
+                display_status = "completed"
+                display_message = status_message or "Processing completed successfully"
+            else:
+                display_status = current_status or "validated"
+                display_message = status_message or "Awaiting processing"
 
         all_records.append({
             "id": rec_id,
