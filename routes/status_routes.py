@@ -71,7 +71,7 @@ def status():
                 run_started_at = None
 
         # Build step progress when processing
-        if current_status == "processing":
+        if current_status == "processing" and has_results:
             show_steps = True
             for step in STEP_NAMES:
                 step_folder = os.path.join(result_root, step)
@@ -105,7 +105,7 @@ def status():
             display_message = status_message or "Error during processing"
         elif current_status == "completed":
             display_status = "completed"
-            display_message = status_message or "Processing completed successfully"
+            display_message = ""
         elif current_status == "validated":
             display_status = "validated"
             display_message = status_message or "Awaiting processing"
@@ -113,7 +113,7 @@ def status():
             # Fallback to inferred completion when status.json is missing or unexpected
             if is_completed:
                 display_status = "completed"
-                display_message = status_message or "Processing completed successfully"
+                display_message = ""
             else:
                 display_status = current_status or "validated"
                 display_message = status_message or "Awaiting processing"

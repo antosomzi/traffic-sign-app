@@ -4,6 +4,8 @@ import boto3
 import paramiko
 import time
 import os
+import json
+from datetime import datetime
 from gpu_config import (
     AWS_REGION, GPU_INSTANCE_ID, KEY_NAME,
     EFS_DNS, EFS_MOUNT_POINT
@@ -74,8 +76,21 @@ def start_and_run_pipeline_ssh(recording_id):
             raise Exception(f"EFS mount failed: {stderr.read().decode()}")
         print("✅ EFS mounted")
         
-        print(f"[GPU] Running real pipeline in Docker (may take several minutes)...")
+        # Update status.json to show pipeline is running (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
+        status_file = f"{recording_path}/status.json"
+        try:
+            with open(status_file, 'w') as f:
+                json.dump({
+                    "status": "processing",
+                    "message": "Pipeline running on GPU...",
+                    "timestamp": datetime.now().isoformat()
+                }, f, indent=2)
+            print("✅ Status updated: Pipeline running on GPU")
+        except Exception as e:
+            print(f"⚠️ Could not update status file: {e}")
+        
+        print(f"[GPU] Running real pipeline in Docker (may take several minutes)...")
         docker_cmd = (
             "sudo docker run --rm --gpus all "
             "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline:/usr/src/app "
