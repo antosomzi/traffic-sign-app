@@ -99,7 +99,11 @@ def status():
         # Determine display status prioritizing the explicit status.json value
         if current_status == "processing":
             display_status = "processing"
-            display_message = status_message or "Processing in progress..."
+            # Only show message if result folder doesn't exist yet
+            if has_results:
+                display_message = ""
+            else:
+                display_message = status_message or "Processing in progress..."
         elif current_status == "error":
             display_status = "error"
             display_message = status_message or "Error during processing"
