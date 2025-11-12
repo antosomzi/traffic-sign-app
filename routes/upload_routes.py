@@ -63,7 +63,7 @@ def upload_recording():
     if exists is None:
         return jsonify({"error": "Uploaded file is not a valid ZIP archive or cannot be inspected."}), 400
     if exists:
-        return jsonify({"error": f"Recording with ID '{zip_top}' already exists."}), 400
+        return jsonify({"error": f"Recording with ID '{zip_top}' has already been uploaded."}), 400
 
     # --- Fin du check existence ---
 
