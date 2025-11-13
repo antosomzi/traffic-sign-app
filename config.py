@@ -24,7 +24,7 @@ class Config:
     
     # File upload settings
     ALLOWED_EXTENSIONS = {"zip", "tar", "tar.gz", "tgz"}
-    MAX_CONTENT_LENGTH = 8 * 1024 * 1024 * 1024  # 8 GiB
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024 * 1024  # 16 GiB
 
 
 # Redis client initialization
