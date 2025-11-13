@@ -28,7 +28,7 @@ Web application for uploading, validating, and asynchronously processing traffic
 ### Execution Modes
 
 Toggle via `USE_GPU_INSTANCE` environment variable:
-- **Local mode** (default): Runs a local fake pipeline 
+- **Local mode** (default): Runs a local fake pipeline
 - **GPU mode**: Launches AWS EC2 GPU instance, executes via SSH, auto-stops after completion
 
 For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
@@ -51,9 +51,13 @@ app/
 ├── app.py                      # Flask application entry point 
 ├── config.py                   # Centralized configuration management
 ├── celery_app.py               # Celery configuration
-├── tasks.py                    # Async pipeline tasks
-├── gpu_pipeline_runner.py      # GPU instance pipeline execution
-├── gpu_config.py               # AWS GPU configuration
+├── pipeline/                   # ML pipeline package
+│   ├── __init__.py             # Package marker
+│   ├── celery_tasks.py         # Celery tasks driving the pipeline
+│   └── gpu/
+│       ├── __init__.py         # GPU helpers package marker
+│       ├── config.py           # AWS GPU configuration
+│       └── runner.py           # GPU instance pipeline execution
 ├── simulate_pipeline.sh        # Pipeline simulation script
 ├── start_gunicorn.sh           # Production server startup
 ├── requirements.txt            # Python dependencies
@@ -177,7 +181,7 @@ Open **3 terminals**:
 redis-server
 
 # Terminal 2 - Celery Worker
-celery -A tasks worker --loglevel=INFO
+celery -A celery_app worker --loglevel=INFO
 
 # Terminal 3 - Flask App
 python app.py

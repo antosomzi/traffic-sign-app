@@ -4,7 +4,7 @@
 
 **3-Tier Asynchronous ML Processing System:**
 - **Flask (app.py)**: Web interface for upload/validation, runs on Gunicorn with 4 workers
-- **Celery (tasks.py)**: Asynchronous ML pipeline execution worker
+- **Celery (pipeline/celery_tasks.py)**: Asynchronous ML pipeline execution worker
 - **Redis**: Message broker for Celery + shared state storage across Gunicorn workers
 
 **Critical Design Decision**: Multi-worker Gunicorn means each worker has separate memory. Redis stores extraction progress as JSON strings (key: `extraction:<job_id>`) so any worker can read another worker's upload status. Without this, status checks return 404 when handled by different workers.
@@ -19,13 +19,13 @@
 
 Toggle with environment variable `USE_GPU_INSTANCE`:
 - **false** (default): Runs pipeline locally via `simulate_pipeline.sh`
-- **true**: Launches AWS EC2 GPU instance (`gpu_pipeline_runner.py`), executes via SSH, auto-stops instance after completion
+- **true**: Launches AWS EC2 GPU instance (`pipeline/gpu/runner.py`), executes via SSH, auto-stops instance after completion
 
 GPU mode architecture:
 - Main EC2 instance (t3.large) manages lifecycle
 - GPU instance (g6e.xlarge) with Deep Learning AMI
 - Shared EFS filesystem (`/home/ec2-user`) for recordings access
-- See `gpu_config.py` for instance IDs, regions, EFS DNS
+- See `pipeline/gpu/config.py` for instance IDs, regions, EFS DNS
 
 ## Critical File Structure
 
@@ -51,7 +51,7 @@ Automatic cleanup: Removes `__MACOSX/`, `.DS_Store`, `._*` files during extracti
 redis-server
 
 # Terminal 2  
-celery -A tasks worker --loglevel=INFO
+celery -A celery_app worker --loglevel=INFO
 
 # Terminal 3
 python app.py  # Dev mode (single worker, auto-reload)
@@ -82,7 +82,7 @@ python app.py  # Dev mode (single worker, auto-reload)
 1. **Missing Redis password**: Production requires `REDIS_PASSWORD` in `.env` AND Redis config (`/etc/redis6/redis6.conf`)
 2. **GPU SSH key**: Must exist at `/home/ec2-user/traffic-sign-inventory_keypair.pem` with correct permissions (400)
 3. **IAM role requirement**: Main EC2 instance needs `AmazonEC2FullAccess` to start/stop GPU instance
-4. **EFS mount**: GPU instance must mount EFS before pipeline execution (`mount_cmd` in `gpu_pipeline_runner.py`)
+4. **EFS mount**: GPU instance must mount EFS before pipeline execution (`mount_cmd` in `pipeline/gpu/runner.py`)
 5. **Gunicorn timeouts**: Set `--timeout 300` for large uploads (8GB max, configured in `MAX_CONTENT_LENGTH`)
 
 ## External Dependencies
@@ -94,6 +94,6 @@ python app.py  # Dev mode (single worker, auto-reload)
 ## Reference Files
 
 - Architecture details: `README.md`, `DEPLOYMENT.md`
-- GPU configuration: `EC2_GPU_CONFIG.md`, `gpu_config.py`
+- GPU configuration: `EC2_GPU_CONFIG.md`, `pipeline/gpu/config.py`
 - Routes: `app.py` lines 378-645 (upload, status, download endpoints)
 - Validation logic: `app.py` lines 87-195 (strict hierarchy enforcement)

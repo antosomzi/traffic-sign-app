@@ -1,70 +1,68 @@
-"""GPU Instance Manager - Start existing GPU instance, run pipeline, stop"""
+"""GPU instance manager: start, run the pipeline over SSH, and shut down."""
+
+import json
+import time
+from datetime import datetime
 
 import boto3
 import paramiko
-import time
-import os
-import json
-from datetime import datetime
-from gpu_config import (
-    AWS_REGION, GPU_INSTANCE_ID, KEY_NAME,
-    EFS_DNS, EFS_MOUNT_POINT
-)
+
+from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTANCE_ID
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 
 
 def start_and_run_pipeline_ssh(recording_id):
     """Start existing GPU instance, run pipeline via SSH, stop instance."""
-    
-    ec2 = boto3.client('ec2', region_name=AWS_REGION)
+
+    ec2 = boto3.client("ec2", region_name=AWS_REGION)
     ssh = None
-    
+
     try:
         print(f"[GPU] Checking instance {GPU_INSTANCE_ID} state...")
         response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
-        current_state = response['Reservations'][0]['Instances'][0]['State']['Name']
+        current_state = response["Reservations"][0]["Instances"][0]["State"]["Name"]
         print(f"   Current state: {current_state}")
-        
-        if current_state == 'stopping':
+
+        if current_state == "stopping":
             print("   Instance is stopping, waiting for it to stop (2-3 min)...")
-            waiter = ec2.get_waiter('instance_stopped')
+            waiter = ec2.get_waiter("instance_stopped")
             waiter.wait(InstanceIds=[GPU_INSTANCE_ID])
             print("   ✅ Instance stopped")
-        elif current_state == 'running':
+        elif current_state == "running":
             print("   Instance already running, skipping start")
-        elif current_state != 'stopped':
+        elif current_state != "stopped":
             raise Exception(f"Instance is in unexpected state: {current_state}")
-        
-        if current_state in ['stopped', 'stopping']:
+
+        if current_state in ["stopped", "stopping"]:
             print(f"[GPU] Starting instance {GPU_INSTANCE_ID}...")
             ec2.start_instances(InstanceIds=[GPU_INSTANCE_ID])
-            print(f"✅ Instance start initiated")
-        
+            print("✅ Instance start initiated")
+
         print("[GPU] Waiting for instance to be running...")
-        waiter = ec2.get_waiter('instance_running')
+        waiter = ec2.get_waiter("instance_running")
         waiter.wait(InstanceIds=[GPU_INSTANCE_ID])
-        
+
         response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
-        public_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
+        public_ip = response["Reservations"][0]["Instances"][0]["PublicIpAddress"]
         print(f"✅ Instance running: {public_ip}")
-        
+
         print("[GPU] Waiting for SSH to be ready (60s)...")
         time.sleep(60)
-        
+
         print("[GPU] Connecting via SSH...")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(
             hostname=public_ip,
-            username='ec2-user',
+            username="ec2-user",
             key_filename=SSH_KEY_PATH,
             timeout=30,
             look_for_keys=False,
-            allow_agent=False
+            allow_agent=False,
         )
         print("✅ SSH connected")
-        
+
         print("[GPU] Mounting EFS...")
         mount_cmd = (
             f"sudo mkdir -p {EFS_MOUNT_POINT} && "
@@ -75,22 +73,26 @@ def start_and_run_pipeline_ssh(recording_id):
         if exit_code != 0:
             raise Exception(f"EFS mount failed: {stderr.read().decode()}")
         print("✅ EFS mounted")
-        
+
         # Update status.json to show pipeline is running (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         status_file = f"{recording_path}/status.json"
         try:
-            with open(status_file, 'w') as f:
-                json.dump({
-                    "status": "processing",
-                    "message": "Pipeline running on GPU...",
-                    "timestamp": datetime.now().isoformat()
-                }, f, indent=2)
+            with open(status_file, "w") as f:
+                json.dump(
+                    {
+                        "status": "processing",
+                        "message": "Pipeline running on GPU...",
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    f,
+                    indent=2,
+                )
             print("✅ Status updated: Pipeline running on GPU")
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - remote filesystem side effect
             print(f"⚠️ Could not update status file: {e}")
-        
-        print(f"[GPU] Running real pipeline in Docker (may take several minutes)...")
+
+        print("[GPU] Running real pipeline in Docker (may take several minutes)...")
         docker_cmd = (
             "sudo docker run --rm --gpus all "
             "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline:/usr/src/app "
@@ -116,31 +118,30 @@ def start_and_run_pipeline_ssh(recording_id):
             raise Exception(f"Pipeline failed (exit {exit_code}): {error[:200]}")
 
         print(f"✅ Pipeline completed in {elapsed // 60}min")
-        
+
         ssh.close()
         print("✅ SSH closed")
-        
+
         print(f"[GPU] Stopping instance {GPU_INSTANCE_ID}...")
         ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
         print("✅ Instance stopped")
-        
+
         return True, GPU_INSTANCE_ID, "Pipeline execution completed successfully"
-        
-    except Exception as e:
+
+    except Exception as e:  # pragma: no cover - defensive logging
         error_msg = str(e)
         print(f"❌ ERROR: {error_msg}")
-        
+
         if ssh:
             try:
                 ssh.close()
-            except:
+            except Exception:
                 pass
-        
+
         try:
             print(f"[GPU] Stopping instance {GPU_INSTANCE_ID} after error...")
             ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
-        except:
+        except Exception:
             pass
-        
-        return False, GPU_INSTANCE_ID, error_msg
 
+        return False, GPU_INSTANCE_ID, error_msg

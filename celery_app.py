@@ -26,7 +26,8 @@ celery.conf.update(
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
+    imports=('pipeline.celery_tasks',),
 )
 
 # Import tasks to register them with Celery
-import tasks
+import pipeline.celery_tasks  # noqa: F401

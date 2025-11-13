@@ -290,9 +290,164 @@
         .refresh-btn:hover {
             background: #e0e0e0;
         }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            animation: slideIn 0.3s ease;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .modal-icon {
+            font-size: 48px;
+        }
+
+        .modal-icon.warning {
+            color: #f59e0b;
+        }
+
+        .modal-icon.danger {
+            color: #ef4444;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .modal-message {
+            color: #4b5563;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .modal-list {
+            margin: 12px 0;
+            padding-left: 20px;
+        }
+
+        .modal-list li {
+            margin: 6px 0;
+            color: #6b7280;
+        }
+
+        .modal-recording-id {
+            background: #f3f4f6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #1f2937;
+            display: inline-block;
+            margin: 8px 0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .modal-btn-cancel {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+
+        .modal-btn-cancel:hover {
+            background: #e5e7eb;
+        }
+
+        .modal-btn-confirm {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .modal-btn-confirm:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .modal-btn-confirm.danger {
+            background: #ef4444;
+        }
+
+        .modal-btn-confirm.danger:hover {
+            background: #dc2626;
+        }
     </style>
 </head>
 <body>
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-icon" id="modalIcon">⚠️</span>
+                <h2 class="modal-title" id="modalTitle">Confirm Action</h2>
+            </div>
+            <div class="modal-message" id="modalMessage"></div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
+                <button class="modal-btn modal-btn-confirm" id="modalConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <h1>📊 Recording Status</h1>
@@ -384,6 +539,73 @@
     <script id="recordings-data" type="application/json">{{ recordings|tojson|safe }}</script>
 
     <script>
+        // Custom confirmation modal
+        function showConfirmModal({ title, icon, iconClass, message, confirmText, confirmClass }) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirmModal');
+                const modalTitle = document.getElementById('modalTitle');
+                const modalIcon = document.getElementById('modalIcon');
+                const modalMessage = document.getElementById('modalMessage');
+                const modalCancel = document.getElementById('modalCancel');
+                const modalConfirm = document.getElementById('modalConfirm');
+
+                // Set content
+                modalTitle.textContent = title;
+                modalIcon.textContent = icon;
+                modalIcon.className = `modal-icon ${iconClass}`;
+                modalMessage.innerHTML = message;
+                modalConfirm.textContent = confirmText;
+                
+                // Set confirm button style
+                modalConfirm.className = `modal-btn modal-btn-confirm ${confirmClass}`;
+
+                // Show modal
+                modal.classList.add('show');
+
+                // Handle cancel
+                const handleCancel = () => {
+                    modal.classList.remove('show');
+                    cleanup();
+                    resolve(false);
+                };
+
+                // Handle confirm
+                const handleConfirm = () => {
+                    modal.classList.remove('show');
+                    cleanup();
+                    resolve(true);
+                };
+
+                // Handle click outside modal
+                const handleOverlayClick = (e) => {
+                    if (e.target === modal) {
+                        handleCancel();
+                    }
+                };
+
+                // Handle escape key
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') {
+                        handleCancel();
+                    }
+                };
+
+                // Attach event listeners
+                modalCancel.addEventListener('click', handleCancel);
+                modalConfirm.addEventListener('click', handleConfirm);
+                modal.addEventListener('click', handleOverlayClick);
+                document.addEventListener('keydown', handleEscape);
+
+                // Cleanup function
+                function cleanup() {
+                    modalCancel.removeEventListener('click', handleCancel);
+                    modalConfirm.removeEventListener('click', handleConfirm);
+                    modal.removeEventListener('click', handleOverlayClick);
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            });
+        }
+
         // Auto-refresh every 10 seconds if processing is in progress
         const recordingsDataEl = document.getElementById('recordings-data');
         const recordings = recordingsDataEl ? JSON.parse(recordingsDataEl.textContent) : [];
@@ -416,10 +638,15 @@
             const recordingId = rerunBtn.dataset.recordingId;
             const originalText = rerunBtn.innerHTML;
 
-            const confirmed = confirm(
-                `Re-run the pipeline for recording "${recordingId}"?\n\n` +
-                `This will queue the processing stages again. Existing results will be overwritten when the pipeline completes.`
-            );
+            // Show custom confirmation modal
+            const confirmed = await showConfirmModal({
+                title: 'Re-run Pipeline',
+                icon: '↻',
+                iconClass: 'warning',
+                message: `Re-run the pipeline for recording <div class="modal-recording-id">${recordingId}</div>This will queue the processing stages again. Existing results will be overwritten when the pipeline completes.`,
+                confirmText: 'Re-run',
+                confirmClass: ''
+            });
 
             if (!confirmed) {
                 return;
@@ -470,14 +697,15 @@
             const deleteBtn = event.currentTarget;
             const recordingId = deleteBtn.dataset.recordingId;
 
-            // Confirmation popup
-            const confirmed = confirm(
-                `Are you sure you want to delete recording "${recordingId}"?\n\n` +
-                `This action cannot be undone and will permanently delete:\n` +
-                `• All recording files\n` +
-                `• Processing results\n` +
-                `• Associated uploads`
-            );
+            // Show custom confirmation modal
+            const confirmed = await showConfirmModal({
+                title: 'Delete Recording',
+                icon: '🗑️',
+                iconClass: 'danger',
+                message: `Are you sure you want to delete recording <div class="modal-recording-id">${recordingId}</div>This action cannot be undone and will permanently delete:<ul class="modal-list"><li>All recording files</li><li>Processing results</li></ul>`,
+                confirmText: 'Delete',
+                confirmClass: 'danger'
+            });
 
             if (!confirmed) {
                 return;

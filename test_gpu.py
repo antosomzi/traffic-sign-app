@@ -2,7 +2,7 @@
 """Test script to manually trigger the GPU pipeline task"""
 
 import os
-from tasks import run_pipeline_task
+from pipeline.celery_tasks import run_pipeline_task
 
 # Set to true to test GPU instance start/stop
 os.environ['USE_GPU_INSTANCE'] = 'true'

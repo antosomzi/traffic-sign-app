@@ -9,7 +9,7 @@ from config import Config
 from utils.file_utils import create_status_file
 
 try:
-    from tasks import run_pipeline_task
+    from pipeline.celery_tasks import run_pipeline_task
     CELERY_AVAILABLE = True
 except ImportError:
     CELERY_AVAILABLE = False
