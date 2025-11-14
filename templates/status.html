@@ -451,15 +451,15 @@
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <h1>📊 Recording Status</h1>
-            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+            <button class="refresh-btn" id="refreshButton" type="button">🔄 Refresh</button>
         </div>
         <p class="subtitle">Track the processing progress of your recordings</p>
 
         <a href="/" class="nav-link">← Back to Upload</a>
 
-        {% if recordings %}
+        <div id="recordingsList">
             {% for rec in recordings %}
-            <div class="recording-card">
+            <div class="recording-card" data-recording-id="{{ rec.id }}">
                 <div class="recording-header">
                     <div class="recording-header-left">
                         <div class="recording-id">
@@ -526,14 +526,13 @@
                 {% endif %}
             </div>
             {% endfor %}
-        {% else %}
-        <div class="empty-state">
+        </div>
+        <div id="emptyState" class="empty-state" {% if recordings %}style="display: none;"{% endif %}>
             <div class="empty-icon">📭</div>
             <h2>No Recordings</h2>
             <p>Start by uploading a ZIP file</p>
             <a href="/" class="download-btn" style="margin-top: 20px;">Upload Now</a>
         </div>
-        {% endif %}
     </div>
 
     <script id="recordings-data" type="application/json">{{ recordings|tojson|safe }}</script>
@@ -555,7 +554,7 @@
                 modalIcon.className = `modal-icon ${iconClass}`;
                 modalMessage.innerHTML = message;
                 modalConfirm.textContent = confirmText;
-                
+
                 // Set confirm button style
                 modalConfirm.className = `modal-btn modal-btn-confirm ${confirmClass}`;
 
@@ -606,30 +605,282 @@
             });
         }
 
-        // Auto-refresh every 10 seconds if processing is in progress
         const recordingsDataEl = document.getElementById('recordings-data');
-        const recordings = recordingsDataEl ? JSON.parse(recordingsDataEl.textContent) : [];
-        const hasProcessing = recordings.some(r => r.status === 'processing' || r.status === 'validated');
-        let autoRefreshTimeoutId = null;
+        const initialRecordings = recordingsDataEl ? JSON.parse(recordingsDataEl.textContent) : [];
+        let currentRecordings = Array.isArray(initialRecordings) ? initialRecordings : [];
+        const statusListEl = document.getElementById('recordingsList');
+        const emptyStateEl = document.getElementById('emptyState');
+        const refreshBtn = document.getElementById('refreshButton');
 
-        function scheduleAutoRefresh() {
-            if (!hasProcessing) {
+        const POLL_INTERVAL_MS = 10000;
+        let pollTimeoutId = null;
+        let isFetchingStatuses = false;
+
+        function escapeHtml(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatTimestamp(timestamp) {
+            if (!timestamp) {
+                return '';
+            }
+
+            try {
+                return timestamp.slice(0, 19).replace('T', ' ');
+            } catch (error) {
+                return timestamp;
+            }
+        }
+
+        function buildStatusBadge(rec) {
+            switch (rec.status) {
+                case 'completed':
+                    return { label: '✅ Completed', className: 'status-badge completed' };
+                case 'processing':
+                    return { label: '⏳ In Progress', className: 'status-badge processing' };
+                case 'validated':
+                    return { label: '📋 Validated', className: 'status-badge validated' };
+                case 'error':
+                    return { label: '❌ Error', className: 'status-badge error' };
+                default:
+                    return { label: escapeHtml(rec.status || 'Unknown'), className: 'status-badge' };
+            }
+        }
+
+        function renderMessage(rec) {
+            if (!rec.message) {
+                return '';
+            }
+
+            const safeMessage = escapeHtml(rec.message).replace(/\n/g, '<br>');
+
+            if (rec.status === 'error') {
+                return `
+                <div class="status-message error">
+                    <strong>⚠️ Processing Issue:</strong>
+                    ${safeMessage}
+                </div>`;
+            }
+
+            return `
+            <div class="status-message">
+                ${safeMessage}
+            </div>`;
+        }
+
+        function renderSteps(rec) {
+            if (!rec.show_steps || !Array.isArray(rec.steps) || rec.steps.length === 0) {
+                return '';
+            }
+
+            const stepsHtml = rec.steps.map((step) => {
+                const isDone = step.done;
+                const stepClass = isDone ? 'step done' : 'step pending';
+                const icon = isDone ? '✅' : '⏳';
+
+                return `
+                <div class="${stepClass}">
+                    <span class="step-icon">${icon}</span>
+                    <span>${escapeHtml(step.name)}</span>
+                </div>`;
+            }).join('');
+
+            return `
+            <div class="steps-container">
+                ${stepsHtml}
+            </div>`;
+        }
+
+        function renderRecordingCardHTML(rec) {
+            const badge = buildStatusBadge(rec);
+            const timestampText = formatTimestamp(rec.timestamp);
+            const rerunDisabled = rec.status === 'processing';
+            const deleteDisabled = rec.status === 'processing';
+            const rerunTitle = rerunDisabled
+                ? 'Cannot re-run while processing'
+                : 'Re-run pipeline for this recording';
+            const deleteTitle = deleteDisabled
+                ? 'Cannot delete while processing'
+                : 'Delete this recording';
+            const downloadLink = rec.status === 'completed'
+                ? `<a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Results</a>`
+                : '';
+
+            const timestampHtml = timestampText
+                ? `<div class="timestamp">📅 ${escapeHtml(timestampText)}</div>`
+                : '';
+
+            return `
+            <div class="recording-card" data-recording-id="${escapeHtml(rec.id)}">
+                <div class="recording-header">
+                    <div class="recording-header-left">
+                        <div class="recording-id">
+                            <span>🎥 ${escapeHtml(rec.id)}</span>
+                            <span class="${badge.className}">
+                                ${badge.label}
+                            </span>
+                        </div>
+                        ${timestampHtml}
+                    </div>
+                    <div class="recording-header-right">
+                        <button
+                            class="rerun-btn"
+                            data-recording-id="${escapeHtml(rec.id)}"
+                            ${rerunDisabled ? 'disabled' : ''}
+                            title="${escapeHtml(rerunTitle)}"
+                        >
+                            ↻
+                        </button>
+                        <button
+                            class="delete-btn"
+                            data-recording-id="${escapeHtml(rec.id)}"
+                            ${deleteDisabled ? 'disabled' : ''}
+                            title="${escapeHtml(deleteTitle)}"
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+                ${renderMessage(rec)}
+                ${renderSteps(rec)}
+                ${downloadLink}
+            </div>`;
+        }
+
+        function clearStatusPolling() {
+            if (pollTimeoutId !== null) {
+                clearTimeout(pollTimeoutId);
+                pollTimeoutId = null;
+            }
+        }
+
+        function scheduleStatusPolling() {
+            clearStatusPolling();
+
+            const shouldPoll = currentRecordings.some(
+                (rec) => rec.status === 'processing' || rec.status === 'validated'
+            );
+
+            if (!shouldPoll) {
                 return;
             }
 
-            autoRefreshTimeoutId = window.setTimeout(() => {
-                location.reload();
-            }, 10000);
+            pollTimeoutId = window.setTimeout(() => {
+                fetchStatuses().catch((error) => {
+                    console.error('Status polling error:', error);
+                });
+            }, POLL_INTERVAL_MS);
         }
 
-        function cancelAutoRefresh() {
-            if (autoRefreshTimeoutId !== null) {
-                clearTimeout(autoRefreshTimeoutId);
-                autoRefreshTimeoutId = null;
+        function pauseStatusPolling() {
+            clearStatusPolling();
+        }
+
+        function resumeStatusPolling() {
+            scheduleStatusPolling();
+        }
+
+        function renderRecordings(recordings) {
+            if (!statusListEl || !emptyStateEl) {
+                return;
+            }
+
+            if (!Array.isArray(recordings) || recordings.length === 0) {
+                statusListEl.innerHTML = '';
+                emptyStateEl.style.display = 'block';
+            } else {
+                statusListEl.innerHTML = recordings.map(renderRecordingCardHTML).join('');
+                emptyStateEl.style.display = 'none';
+            }
+
+            attachActionListeners();
+        }
+
+        async function fetchStatuses(options = {}) {
+            if (isFetchingStatuses) {
+                return;
+            }
+
+            const { manual = false } = options;
+            let originalRefreshContent = null;
+
+            isFetchingStatuses = true;
+
+            if (manual && refreshBtn) {
+                originalRefreshContent = refreshBtn.innerHTML;
+                refreshBtn.disabled = true;
+                refreshBtn.innerHTML = '⏳ Refreshing...';
+            }
+
+            try {
+                const response = await fetch('/status/data', {
+                    headers: { Accept: 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                }
+
+                const payload = await response.json();
+
+                if (!payload || !Array.isArray(payload.recordings)) {
+                    throw new Error('Unexpected response format from server.');
+                }
+
+                currentRecordings = payload.recordings;
+                renderRecordings(currentRecordings);
+            } catch (error) {
+                console.error('Failed to fetch status data:', error);
+            } finally {
+                if (manual && refreshBtn && originalRefreshContent !== null) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.innerHTML = originalRefreshContent;
+                }
+
+                isFetchingStatuses = false;
+                scheduleStatusPolling();
             }
         }
 
-        scheduleAutoRefresh();
+        function handleManualRefresh(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            pauseStatusPolling();
+            fetchStatuses({ manual: true }).catch((error) => {
+                console.error('Manual refresh error:', error);
+            });
+        }
+
+        function attachActionListeners() {
+            document.querySelectorAll('.delete-btn').forEach((button) => {
+                if (button.dataset.listenerAttached === 'true') {
+                    return;
+                }
+
+                button.addEventListener('click', handleDeleteClick);
+                button.dataset.listenerAttached = 'true';
+            });
+
+            document.querySelectorAll('.rerun-btn').forEach((button) => {
+                if (button.dataset.listenerAttached === 'true') {
+                    return;
+                }
+
+                button.addEventListener('click', handleRerunClick);
+                button.dataset.listenerAttached = 'true';
+            });
+        }
 
         async function handleRerunClick(event) {
             event.preventDefault();
@@ -638,7 +889,6 @@
             const recordingId = rerunBtn.dataset.recordingId;
             const originalText = rerunBtn.innerHTML;
 
-            // Show custom confirmation modal
             const confirmed = await showConfirmModal({
                 title: 'Re-run Pipeline',
                 icon: '↻',
@@ -652,7 +902,7 @@
                 return;
             }
 
-            cancelAutoRefresh();
+            pauseStatusPolling();
 
             try {
                 rerunBtn.disabled = true;
@@ -680,14 +930,13 @@
                     throw new Error(result && result.message ? result.message : 'Failed to queue pipeline re-run.');
                 }
 
-                setTimeout(() => {
-                    location.reload();
-                }, 200);
+                await fetchStatuses();
+                resumeStatusPolling();
             } catch (error) {
                 alert(`Failed to re-run pipeline: ${error.message || error}`);
                 rerunBtn.disabled = false;
                 rerunBtn.innerHTML = originalText;
-                scheduleAutoRefresh();
+                resumeStatusPolling();
             }
         }
 
@@ -697,7 +946,6 @@
             const deleteBtn = event.currentTarget;
             const recordingId = deleteBtn.dataset.recordingId;
 
-            // Show custom confirmation modal
             const confirmed = await showConfirmModal({
                 title: 'Delete Recording',
                 icon: '🗑️',
@@ -711,17 +959,15 @@
                 return;
             }
 
-            cancelAutoRefresh();
+            pauseStatusPolling();
             const originalText = deleteBtn.innerHTML;
 
             try {
-                // Show loading state
                 deleteBtn.disabled = true;
                 deleteBtn.innerHTML = '⏳ Deleting...';
 
-                // Send DELETE request with increased timeout
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
 
                 const response = await fetch(`/delete/${encodeURIComponent(recordingId)}`, {
                     method: 'DELETE',
@@ -737,7 +983,7 @@
                 try {
                     result = await response.json();
                 } catch (jsonError) {
-                    // Keep result as null if response has no JSON body
+                    // Ignore missing JSON body
                 }
 
                 if (!response.ok) {
@@ -749,53 +995,54 @@
                     throw new Error('Unexpected response format from server.');
                 }
 
-                // Success response from API
                 if (result.success) {
-                    // Success: remove the card with animation
                     const card = deleteBtn.closest('.recording-card');
-                    card.style.opacity = '0';
-                    card.style.transform = 'scale(0.95)';
-                    card.style.transition = 'all 0.3s ease';
-                    
-                    setTimeout(() => {
-                        card.remove();
-                        
-                        // Check if no recordings left
-                        const remainingCards = document.querySelectorAll('.recording-card');
-                        if (remainingCards.length === 0) {
-                            location.reload(); // Show empty state
-                        }
-                    }, 300);
+
+                    if (card) {
+                        card.style.opacity = '0';
+                        card.style.transform = 'scale(0.95)';
+                        card.style.transition = 'all 0.3s ease';
+
+                        setTimeout(async () => {
+                            card.remove();
+                            currentRecordings = currentRecordings.filter((rec) => rec.id !== recordingId);
+                            renderRecordings(currentRecordings);
+                            await fetchStatuses();
+                            resumeStatusPolling();
+                        }, 300);
+                    } else {
+                        currentRecordings = currentRecordings.filter((rec) => rec.id !== recordingId);
+                        renderRecordings(currentRecordings);
+                        await fetchStatuses();
+                        resumeStatusPolling();
+                    }
                 } else {
-                    // Error: show message and restore button
                     alert(`Error: ${result.message || 'Unknown error'}`);
                     deleteBtn.disabled = false;
                     deleteBtn.innerHTML = originalText;
+                    resumeStatusPolling();
                 }
             } catch (error) {
-                // Network or timeout error
                 console.error('Delete error:', error);
-                
+
                 if (error.name === 'AbortError') {
                     alert('Deletion is taking longer than expected. Please refresh the page to see if it completed successfully.');
                 } else {
                     alert(`Failed to delete recording: ${error.message || error}`);
                 }
+
                 deleteBtn.disabled = false;
                 deleteBtn.innerHTML = originalText;
-            } finally {
-                scheduleAutoRefresh();
+                resumeStatusPolling();
             }
         }
 
-        // Attach click handlers to delete buttons after DOM is ready
-        document.querySelectorAll('.delete-btn').forEach(button => {
-            button.addEventListener('click', handleDeleteClick);
-        });
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', handleManualRefresh);
+        }
 
-        document.querySelectorAll('.rerun-btn').forEach(button => {
-            button.addEventListener('click', handleRerunClick);
-        });
+        attachActionListeners();
+        scheduleStatusPolling();
     </script>
 </body>
 </html>

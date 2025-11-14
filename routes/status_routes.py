@@ -3,7 +3,7 @@
 import os
 import json
 from datetime import datetime
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, render_template, jsonify
 from config import Config
 
 status_bp = Blueprint("status", __name__)
@@ -20,16 +20,14 @@ STEP_NAMES = [
 ]
 
 
-@status_bp.route("/status", methods=["GET"])
-def status():
-    """Lists all recordings and their processing status."""
+def _collect_recordings():
     recordings_root = Config.EXTRACT_FOLDER
 
     all_records = []
-    
+
     if not os.path.isdir(recordings_root):
-        return render_template("status.html", recordings=[], step_names=STEP_NAMES)
-    
+        return all_records
+
     for rec_id in os.listdir(recordings_root):
         rec_folder = os.path.join(recordings_root, rec_id)
         if not os.path.isdir(rec_folder):
@@ -40,7 +38,7 @@ def status():
         current_status = "validated"
         status_message = ""
         timestamp = None
-        
+
         if os.path.isfile(status_file):
             try:
                 with open(status_file, "r") as f:
@@ -48,7 +46,8 @@ def status():
                     current_status = status_data.get("status", "validated")
                     status_message = status_data.get("message", "")
                     timestamp = status_data.get("timestamp", None)
-            except:
+            except Exception:
+                # Ignore malformed JSON and fall back to defaults
                 pass
 
         # Check if processing outputs exist
@@ -134,8 +133,22 @@ def status():
     # Sort by timestamp (most recent first)
     all_records.sort(key=lambda x: x["timestamp"] or "", reverse=True)
 
+    return all_records
+
+
+@status_bp.route("/status", methods=["GET"])
+def status():
+    """Lists all recordings and their processing status."""
+    records = _collect_recordings()
     return render_template(
         "status.html",
-        recordings=all_records,
+        recordings=records,
         step_names=STEP_NAMES
     )
+
+
+@status_bp.route("/status/data", methods=["GET"])
+def status_data():
+    """Returns the recording status data as JSON for AJAX polling."""
+    records = _collect_recordings()
+    return jsonify({"recordings": records})
