@@ -8,6 +8,9 @@ from config import Config
 
 status_bp = Blueprint("status", __name__)
 
+# Check if we're in local mode (for test features)
+IS_LOCAL_MODE = os.getenv("USE_GPU_INSTANCE", "false").lower() != "true"
+
 STEP_NAMES = [
     "s0_detection",
     "s1_small_sign_filter",
@@ -38,6 +41,7 @@ def _collect_recordings():
         current_status = "validated"
         status_message = ""
         timestamp = None
+        error_details = None
 
         if os.path.isfile(status_file):
             try:
@@ -46,6 +50,7 @@ def _collect_recordings():
                     current_status = status_data.get("status", "validated")
                     status_message = status_data.get("message", "")
                     timestamp = status_data.get("timestamp", None)
+                    error_details = status_data.get("error_details", None)
             except Exception:
                 # Ignore malformed JSON and fall back to defaults
                 pass
@@ -127,7 +132,8 @@ def _collect_recordings():
             "message": display_message,
             "timestamp": timestamp,
             "show_steps": show_steps,
-            "steps": step_status if show_steps else None
+            "steps": step_status if show_steps else None,
+            "error_details": error_details
         })
 
     # Sort by timestamp (most recent first)
@@ -143,7 +149,8 @@ def status():
     return render_template(
         "status.html",
         recordings=records,
-        step_names=STEP_NAMES
+        step_names=STEP_NAMES,
+        is_local_mode=IS_LOCAL_MODE
     )
 
 

@@ -6,8 +6,10 @@ from datetime import datetime
 
 import boto3
 import paramiko
+from botocore.exceptions import WaiterError
 
 from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTANCE_ID
+from pipeline.gpu.diagnostics import capture_instance_diagnostics
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 
@@ -41,7 +43,23 @@ def start_and_run_pipeline_ssh(recording_id):
 
         print("[GPU] Waiting for instance to be running...")
         waiter = ec2.get_waiter("instance_running")
-        waiter.wait(InstanceIds=[GPU_INSTANCE_ID])
+        try:
+            waiter.wait(
+                InstanceIds=[GPU_INSTANCE_ID],
+                WaiterConfig={"Delay": 10, "MaxAttempts": 60}
+            )
+        except WaiterError as we:
+            print(f"❌ Waiter failed: {we}")
+            # Capture full diagnostics
+            diagnostics = capture_instance_diagnostics(ec2, GPU_INSTANCE_ID)
+            error_details = {
+                "error_type": "waiter_failed",
+                "waiter_error": str(we),
+                "diagnostics": diagnostics,
+                "timestamp": datetime.now().isoformat(),
+            }
+            print(f"[DEBUG] Diagnostics: {json.dumps(diagnostics, indent=2, default=str)}")
+            return False, GPU_INSTANCE_ID, "EC2 instance failed to start", error_details
 
         response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
         public_ip = response["Reservations"][0]["Instances"][0]["PublicIpAddress"]
@@ -53,15 +71,27 @@ def start_and_run_pipeline_ssh(recording_id):
         print("[GPU] Connecting via SSH...")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(
-            hostname=public_ip,
-            username="ec2-user",
-            key_filename=SSH_KEY_PATH,
-            timeout=30,
-            look_for_keys=False,
-            allow_agent=False,
-        )
-        print("✅ SSH connected")
+        try:
+            ssh.connect(
+                hostname=public_ip,
+                username="ec2-user",
+                key_filename=SSH_KEY_PATH,
+                timeout=30,
+                look_for_keys=False,
+                allow_agent=False,
+            )
+            print("✅ SSH connected")
+        except Exception as ssh_error:
+            print(f"❌ SSH connection failed: {ssh_error}")
+            diagnostics = capture_instance_diagnostics(ec2, GPU_INSTANCE_ID)
+            error_details = {
+                "error_type": "ssh_connection_failed",
+                "ssh_error": str(ssh_error),
+                "public_ip": public_ip,
+                "diagnostics": diagnostics,
+                "timestamp": datetime.now().isoformat(),
+            }
+            return False, GPU_INSTANCE_ID, f"SSH connection failed: {ssh_error}", error_details
 
         print("[GPU] Mounting EFS...")
         mount_cmd = (
@@ -71,7 +101,16 @@ def start_and_run_pipeline_ssh(recording_id):
         stdin, stdout, stderr = ssh.exec_command(mount_cmd)
         exit_code = stdout.channel.recv_exit_status()
         if exit_code != 0:
-            raise Exception(f"EFS mount failed: {stderr.read().decode()}")
+            mount_error = stderr.read().decode()
+            print(f"❌ EFS mount failed: {mount_error}")
+            error_details = {
+                "error_type": "efs_mount_failed",
+                "mount_command": mount_cmd,
+                "exit_code": exit_code,
+                "stderr": mount_error,
+                "timestamp": datetime.now().isoformat(),
+            }
+            return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
 
         # Update status.json to show pipeline is running (avoid circular import)
@@ -114,8 +153,27 @@ def start_and_run_pipeline_ssh(recording_id):
         elapsed = int(time.time() - start_time)
 
         if exit_code != 0:
-            error = stderr.read().decode()
-            raise Exception(f"Pipeline failed (exit {exit_code}): {error[:200]}")
+            error_stderr = stderr.read().decode()
+            print(f"❌ Pipeline failed (exit {exit_code})")
+            
+            # Try to fetch the full pipeline log from the GPU instance
+            pipeline_log = ""
+            try:
+                stdin_log, stdout_log, stderr_log = ssh.exec_command("tail -n 500 /home/ec2-user/pipeline.log 2>&1")
+                pipeline_log = stdout_log.read().decode()
+            except Exception as log_err:
+                pipeline_log = f"Could not retrieve pipeline.log: {log_err}"
+            
+            error_details = {
+                "error_type": "pipeline_execution_failed",
+                "exit_code": exit_code,
+                "docker_stderr": error_stderr[:2000],  # First 2000 chars
+                "pipeline_log_tail": pipeline_log[:5000],  # Last 500 lines (up to 5000 chars)
+                "elapsed_seconds": elapsed,
+                "docker_command": docker_cmd,
+                "timestamp": datetime.now().isoformat(),
+            }
+            return False, GPU_INSTANCE_ID, f"Pipeline failed (exit {exit_code})", error_details
 
         print(f"✅ Pipeline completed in {elapsed // 60}min")
 
@@ -126,7 +184,7 @@ def start_and_run_pipeline_ssh(recording_id):
         ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
         print("✅ Instance stopped")
 
-        return True, GPU_INSTANCE_ID, "Pipeline execution completed successfully"
+        return True, GPU_INSTANCE_ID, "Pipeline execution completed successfully", {}
 
     except Exception as e:  # pragma: no cover - defensive logging
         error_msg = str(e)
@@ -144,4 +202,13 @@ def start_and_run_pipeline_ssh(recording_id):
         except Exception:
             pass
 
-        return False, GPU_INSTANCE_ID, error_msg
+        # For unexpected exceptions, capture diagnostics
+        diagnostics = capture_instance_diagnostics(ec2, GPU_INSTANCE_ID)
+        error_details = {
+            "error_type": "unexpected_exception",
+            "exception": str(e),
+            "exception_type": type(e).__name__,
+            "diagnostics": diagnostics,
+            "timestamp": datetime.now().isoformat(),
+        }
+        return False, GPU_INSTANCE_ID, error_msg, error_details

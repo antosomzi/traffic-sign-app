@@ -241,6 +241,35 @@
             transform: none;
         }
 
+        .test-error-btn {
+            background: #ff9800;
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 9999px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .test-error-btn:hover:not(:disabled) {
+            background: #f57c00;
+            transform: scale(1.05);
+        }
+
+        .test-error-btn:disabled {
+            background: #ffe0b2;
+            color: #94a3b8;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .delete-btn {
             background: #dc3545;
             color: white;
@@ -491,6 +520,16 @@
                         >
                             ↻
                         </button>
+                        {% if is_local_mode %}
+                        <button
+                            class="test-error-btn"
+                            data-recording-id="{{ rec.id }}"
+                            {% if rec.status == "processing" %}disabled{% endif %}
+                            title="{% if rec.status == 'processing' %}Cannot test while processing{% else %}Simulate pipeline error (test only){% endif %}"
+                        >
+                            ⚠️
+                        </button>
+                        {% endif %}
                         <button
                             class="delete-btn"
                             data-recording-id="{{ rec.id }}"
@@ -507,6 +546,18 @@
                         <strong>⚠️ Processing Issue:</strong>
                     {% endif %}
                     {{ rec.message }}
+                    {% if rec.error_details and rec.status == 'error' %}
+                    <button 
+                        class="show-details-btn" 
+                        onclick="toggleErrorDetails('{{ rec.id }}')"
+                        style="margin-left: 10px; padding: 4px 10px; font-size: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                    >
+                        🔍 Show Technical Details
+                    </button>
+                    <div id="error-details-{{ rec.id }}" style="display: none; margin-top: 10px;">
+                        <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; max-height: 400px;">{{ rec.error_details | tojson(indent=2) }}</pre>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
@@ -611,6 +662,7 @@
         const statusListEl = document.getElementById('recordingsList');
         const emptyStateEl = document.getElementById('emptyState');
         const refreshBtn = document.getElementById('refreshButton');
+        const isLocalMode = {{ 'true' if is_local_mode else 'false' }};
 
         const POLL_INTERVAL_MS = 10000;
         let pollTimeoutId = null;
@@ -662,12 +714,30 @@
             }
 
             const safeMessage = escapeHtml(rec.message).replace(/\n/g, '<br>');
+            
+            let errorDetailsButton = '';
+            if (rec.error_details && rec.status === 'error') {
+                const errorDetailsJson = JSON.stringify(rec.error_details, null, 2);
+                errorDetailsButton = `
+                    <button 
+                        class="show-details-btn" 
+                        onclick="toggleErrorDetails('${escapeHtml(rec.id)}')"
+                        style="margin-left: 10px; padding: 4px 10px; font-size: 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                    >
+                        🔍 Show Technical Details
+                    </button>
+                    <div id="error-details-${escapeHtml(rec.id)}" style="display: none; margin-top: 10px;">
+                        <pre style="background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px; max-height: 400px;">${escapeHtml(errorDetailsJson)}</pre>
+                    </div>
+                `;
+            }
 
             if (rec.status === 'error') {
                 return `
                 <div class="status-message error">
                     <strong>⚠️ Processing Issue:</strong>
                     ${safeMessage}
+                    ${errorDetailsButton}
                 </div>`;
             }
 
@@ -740,6 +810,14 @@
                         >
                             ↻
                         </button>
+                        ${isLocalMode ? `<button
+                            class="test-error-btn"
+                            data-recording-id="${escapeHtml(rec.id)}"
+                            ${rerunDisabled ? 'disabled' : ''}
+                            title="${rerunDisabled ? 'Cannot test while processing' : 'Simulate pipeline error (test only)'}"
+                        >
+                            ⚠️
+                        </button>` : ''}
                         <button
                             class="delete-btn"
                             data-recording-id="${escapeHtml(rec.id)}"
@@ -880,6 +958,15 @@
                 button.addEventListener('click', handleRerunClick);
                 button.dataset.listenerAttached = 'true';
             });
+
+            document.querySelectorAll('.test-error-btn').forEach((button) => {
+                if (button.dataset.listenerAttached === 'true') {
+                    return;
+                }
+
+                button.addEventListener('click', handleTestErrorClick);
+                button.dataset.listenerAttached = 'true';
+            });
         }
 
         async function handleRerunClick(event) {
@@ -936,6 +1023,62 @@
                 alert(`Failed to re-run pipeline: ${error.message || error}`);
                 rerunBtn.disabled = false;
                 rerunBtn.innerHTML = originalText;
+                resumeStatusPolling();
+            }
+        }
+
+        async function handleTestErrorClick(event) {
+            event.preventDefault();
+
+            const testBtn = event.currentTarget;
+            const recordingId = testBtn.dataset.recordingId;
+
+            const confirmed = await showConfirmModal({
+                title: 'Simulate Pipeline Error',
+                icon: '⚠️',
+                iconClass: 'warning',
+                message: `Simulate a pipeline error for recording <div class="modal-recording-id">${recordingId}</div>This will create a fake error with error_details for testing the error display functionality.`,
+                confirmText: 'Simulate Error',
+                confirmClass: ''
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            pauseStatusPolling();
+
+            try {
+                testBtn.disabled = true;
+
+                const response = await fetch(`/test/simulate-error/${encodeURIComponent(recordingId)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                let result = null;
+                try {
+                    result = await response.json();
+                } catch (jsonError) {
+                    result = null;
+                }
+
+                if (!response.ok) {
+                    const serverMessage = result && result.message ? `: ${result.message}` : `: ${response.statusText}`;
+                    throw new Error(`HTTP ${response.status}${serverMessage}`);
+                }
+
+                if (!result || !result.success) {
+                    throw new Error(result && result.message ? result.message : 'Failed to simulate error.');
+                }
+
+                await fetchStatuses();
+                resumeStatusPolling();
+            } catch (error) {
+                alert(`Failed to simulate error: ${error.message || error}`);
+                testBtn.disabled = false;
                 resumeStatusPolling();
             }
         }
@@ -1043,6 +1186,20 @@
 
         attachActionListeners();
         scheduleStatusPolling();
+
+        // Toggle error details visibility
+        window.toggleErrorDetails = function(recordingId) {
+            const detailsDiv = document.getElementById('error-details-' + recordingId);
+            const button = event.target;
+            
+            if (detailsDiv.style.display === 'none') {
+                detailsDiv.style.display = 'block';
+                button.textContent = '🔼 Hide Technical Details';
+            } else {
+                detailsDiv.style.display = 'none';
+                button.textContent = '🔍 Show Technical Details';
+            }
+        };
     </script>
 </body>
 </html>

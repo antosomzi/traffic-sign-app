@@ -8,9 +8,11 @@ Refactored modular architecture with:
 - Centralized configuration
 """
 
+import os
 from flask import Flask
 from config import Config
 from routes import upload_bp, status_bp, download_bp, delete_bp, rerun_bp
+from routes.test_routes import test_bp
 
 
 def create_app(config_class=Config):
@@ -35,6 +37,10 @@ def create_app(config_class=Config):
     app.register_blueprint(download_bp)
     app.register_blueprint(delete_bp)
     app.register_blueprint(rerun_bp)
+    
+    # Register test routes (only active in local mode)
+    if os.getenv("USE_GPU_INSTANCE", "false").lower() != "true":
+        app.register_blueprint(test_bp)
     
     # Add security headers
     @app.after_request

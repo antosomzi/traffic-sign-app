@@ -21,8 +21,15 @@ RECORDINGS_PATH = os.path.join(BASE_PATH, "recordings")
 USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
 
 
-def update_status(recording_path, status, message=""):
-    """Updates the status.json file for a recording."""
+def update_status(recording_path, status, message="", error_details=None):
+    """Updates the status.json file for a recording.
+    
+    Args:
+        recording_path: Path to the recording directory
+        status: Status string (processing, completed, error)
+        message: User-friendly status message
+        error_details: Optional dict with technical error details (diagnostics, logs, etc.)
+    """
     status_file = os.path.join(recording_path, "status.json")
 
     status_data = {
@@ -30,6 +37,10 @@ def update_status(recording_path, status, message=""):
         "message": message,
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
+    
+    # Add error_details if provided (for technical debugging)
+    if error_details:
+        status_data["error_details"] = error_details
 
     with open(status_file, "w") as f:
         json.dump(status_data, f, indent=2)
@@ -78,10 +89,18 @@ def run_pipeline_gpu(recording_id, recording_path):
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
     update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
 
-    success, instance_id, message = start_and_run_pipeline_ssh(recording_id)
+    # start_and_run_pipeline_ssh now returns 4 values: success, instance_id, message, error_details
+    result = start_and_run_pipeline_ssh(recording_id)
+    success, instance_id, message, error_details = result if len(result) == 4 else (*result, {})
 
     if not success:
-        update_status(recording_path, "error", f"GPU pipeline failed: {message}")
+        # Store both user-friendly message and technical error details
+        update_status(
+            recording_path, 
+            "error", 
+            f"GPU pipeline failed: {message}",
+            error_details=error_details
+        )
         raise Exception(f"GPU pipeline failed: {message}")
 
     # Wait for NFS cache sync and verify output
@@ -140,7 +159,7 @@ def run_pipeline_task(recording_id):
 
     except (FileNotFoundError, TimeoutError) as e:
         # These exceptions already have user-friendly messages written to status.json
-        # Don't overwrite them - just log and re-raise
+        # Don't overwrite them - just re-raise
         print(f"[INFO] Expected error handled with user-friendly message: {type(e).__name__}")
         raise
 
