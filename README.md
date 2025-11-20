@@ -41,6 +41,45 @@ In production, Nginx acts as a reverse proxy in front of Flask:
 
 For detailed deployment, Nginx configuration, and SSL setup, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────┐
+│              NGINX (Reverse Proxy)                  │
+│  • Handles HTTPS/SSL (port 443)                     │
+│  • Forwards to Gunicorn (port 5000)                 │
+│  • 20GB upload limit                                │
+└─────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────┐
+│           GUNICORN (4 workers)                      │
+│  Handles HTTP requests in parallel                  │
+│  • User 1: Upload                                   │
+│  • User 2: Check status                             │
+│  • User 3: Upload                                   │
+│  • User 4: Download results                         │
+└─────────────────────────────────────────────────────┘
+                    ↓ .delay()
+┌─────────────────────────────────────────────────────┐
+│              REDIS QUEUE                            │
+│  [Task 1] [Task 2] [Task 3] ...                    │
+└─────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────┐
+│         CELERY WORKER (1 worker)                    │
+│  Processes ML pipelines sequentially                │
+│  • Task 1 → 40 seconds                              │
+│  • Task 2 → 40 seconds                              │
+│  • Task 3 → 40 seconds                              │
+└─────────────────────────────────────────────────────┘
+```
+
+**Key Points:**
+- **Nginx**: SSL termination + reverse proxy (HTTPS → HTTP)
+- **Gunicorn workers (4)**: Handle multiple HTTP requests simultaneously
+- **Celery worker (1)**: Process one ML pipeline at a time
+- Users can upload simultaneously, pipelines are queued
+
 ## ✨ FLow
 
 1. User uploads file → extraction job starts (tracked by `job_id`)

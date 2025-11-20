@@ -209,23 +209,7 @@ sudo systemctl start flask-app
 sudo systemctl start celery-worker
 ```
 
-### 8. Verify Services
-
-```bash
-# Check Flask status
-sudo systemctl status flask-app
-
-# Check Celery status
-sudo systemctl status celery-worker
-
-# View Flask logs
-sudo journalctl -u flask-app -f
-
-# Commande to follow the pipeline progress => View Celery logs
-sudo journalctl -u celery-worker -f
-```
-
-### 9. Configure Nginx Reverse Proxy (Production)
+### 8. Configure Nginx Reverse Proxy (Production)
 
 Nginx acts as a reverse proxy to handle HTTPS/SSL and forward requests to Flask.
 
@@ -310,7 +294,7 @@ sudo certbot --nginx -d sci.ce.gatech.edu
 curl -I https://sci.ce.gatech.edu/
 ```
 
-### 10. Configure Firewall (AWS Security Group)
+### 9. Configure Firewall (AWS Security Group)
 
 In AWS Console, configure Security Group to allow:
 - **Port 80** (HTTP) - for Let's Encrypt validation and HTTP redirect
@@ -329,54 +313,29 @@ In AWS Console, configure Security Group to allow:
 | HTTPS | TCP      | 443        | 0.0.0.0/0       | HTTPS (secure access)    |
 | SSH   | TCP      | 22         | Your IP only    | SSH access               |
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────┐
-│              NGINX (Reverse Proxy)                  │
-│  • Handles HTTPS/SSL (port 443)                     │
-│  • Forwards to Gunicorn (port 5000)                 │
-│  • 20GB upload limit                                │
-└─────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────┐
-│           GUNICORN (4 workers)                      │
-│  Handles HTTP requests in parallel                  │
-│  • User 1: Upload                                   │
-│  • User 2: Check status                             │
-│  • User 3: Upload                                   │
-│  • User 4: Download results                         │
-└─────────────────────────────────────────────────────┘
-                    ↓ .delay()
-┌─────────────────────────────────────────────────────┐
-│              REDIS QUEUE                            │
-│  [Task 1] [Task 2] [Task 3] ...                    │
-└─────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────┐
-│         CELERY WORKER (1 worker)                    │
-│  Processes ML pipelines sequentially                │
-│  • Task 1 → 40 seconds                              │
-│  • Task 2 → 40 seconds                              │
-│  • Task 3 → 40 seconds                              │
-└─────────────────────────────────────────────────────┘
-```
-
-**Key Points:**
-- **Nginx**: SSL termination + reverse proxy (HTTPS → HTTP)
-- **Gunicorn workers (4)**: Handle multiple HTTP requests simultaneously
-- **Celery worker (1)**: Process one ML pipeline at a time
-- Users can upload simultaneously, pipelines are queued
-
-## Maintenance Commands
+### 10. Verify Services
 
 ```bash
+# Check services status
+sudo systemctl status flask-app
+sudo systemctl status celery-worker
+sudo systemctl status nginx
+
 # Test Redis connection
 redis6-cli -a Moulines1 ping
 # Should return: PONG
 
+# View logs in real-time (follow pipeline progress)
+sudo journalctl -u flask-app -f
+sudo journalctl -u celery-worker -f
+sudo tail -f /var/log/nginx/sci_access.log
+```
+
+## Maintenance Commands
+
+```bash
 # Restart services after code changes
-sudo systemctl restart flask-app celery-worker
+sudo systemctl restart flask-app celery-worker nginx
 
 # View logs in real-time
 sudo journalctl -u flask-app -f
@@ -394,6 +353,7 @@ sudo systemctl stop flask-app celery-worker
 # Check service status
 sudo systemctl status flask-app
 sudo systemctl status celery-worker
+sudo systemctl status nginx
 ```
 
 ## Updating the Application
@@ -509,35 +469,3 @@ sudo rm -rf /home/ec2-user/recordings/test_recording
 ```
 
 **Note:** The application will automatically attempt to use `sudo chown` when encountering permission errors during deletion, but this requires the sudoers configuration from step 7.
-
-## Performance Tuning
-
-### Adjust Gunicorn Workers
-
-```bash
-# Formula: (2 × CPU cores) + 1
-# For t2.medium (2 vCPUs): 2 × 2 + 1 = 5 workers
-
-# Edit systemd service
-sudo nano /etc/systemd/system/flask-app.service
-
-# Change -w 4 to -w 5
-ExecStart=.../gunicorn -w 5 -b 0.0.0.0:5000 app:app --timeout 300
-
-# Reload and restart
-sudo systemctl daemon-reload
-sudo systemctl restart flask-app
-```
-
-### Monitor Resource Usage
-
-```bash
-# Check CPU and memory usage
-htop
-
-# Check disk usage
-df -h
-
-# Check Redis memory usage
-redis6-cli -a Moulines1 INFO memory
-```
