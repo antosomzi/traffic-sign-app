@@ -24,6 +24,7 @@ Web application for uploading, validating, and asynchronously processing traffic
   - Shared state storage for extraction progress (critical for multi-worker Gunicorn)
 - **Celery**: Asynchronous worker for ML pipeline processing
 - **Gunicorn**: Production WSGI server with 4 worker processes
+- **Nginx**: Reverse proxy for HTTPS/SSL (production only)
 
 ### Execution Modes
 
@@ -31,7 +32,14 @@ Toggle via `USE_GPU_INSTANCE` environment variable:
 - **Local mode** (default): Runs a local fake pipeline
 - **GPU mode**: Launches AWS EC2 GPU instance, executes via SSH, auto-stops after completion
 
-For detailed deployment and GPU configuration, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+### Production Setup
+
+In production, Nginx acts as a reverse proxy in front of Flask:
+- Handles SSL/TLS termination (HTTPS)
+- Forwards requests to Gunicorn (port 5000)
+- Manages large file uploads (20GB limit)
+
+For detailed deployment, Nginx configuration, and SSL setup, see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ## ✨ FLow
 

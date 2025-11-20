@@ -225,17 +225,120 @@ sudo journalctl -u flask-app -f
 sudo journalctl -u celery-worker -f
 ```
 
-### 9. Configure Firewall (AWS Security Group)
+### 9. Configure Nginx Reverse Proxy (Production)
+
+Nginx acts as a reverse proxy to handle HTTPS/SSL and forward requests to Flask.
+
+#### Install Nginx
+
+```bash
+sudo yum install nginx -y
+sudo systemctl enable nginx
+```
+
+#### Create Nginx Configuration
+
+```bash
+sudo nano /etc/nginx/conf.d/sci.conf
+```
+
+**Add this configuration:**
+
+```nginx
+server {
+    listen 80;
+    server_name sci.ce.gatech.edu;
+
+    # Logs for monitoring and debugging
+    access_log /var/log/nginx/sci_access.log;
+    error_log /var/log/nginx/sci_error.log;
+
+    # Allow large file uploads (20GB)
+    client_max_body_size 20G;
+    client_body_timeout 300s;
+
+    # Reverse proxy to Flask (Gunicorn on port 5000)
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeouts for long uploads
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+#### Test and Start Nginx
+
+```bash
+# Test configuration
+sudo nginx -t
+
+# Start Nginx
+sudo systemctl restart nginx
+sudo systemctl status nginx
+```
+
+#### Configure SSL with Let's Encrypt (Free HTTPS)
+
+**Prerequisites:**
+- DNS must point to your EC2 IP address
+- Port 80 and 443 must be open in AWS Security Group
+
+```bash
+# Install Certbot
+sudo yum install certbot python3-certbot-nginx -y
+
+# Obtain SSL certificate (Certbot will modify Nginx config automatically)
+sudo certbot --nginx -d sci.ce.gatech.edu
+```
+
+**Certbot will:**
+- ✅ Obtain a free SSL certificate from Let's Encrypt
+- ✅ Configure Nginx to listen on port 443 (HTTPS)
+- ✅ Set up automatic certificate renewal (certificates expire after 90 days)
+- ✅ Redirect HTTP to HTTPS automatically
+
+**Verify HTTPS works:**
+
+```bash
+curl -I https://sci.ce.gatech.edu/
+```
+
+### 10. Configure Firewall (AWS Security Group)
 
 In AWS Console, configure Security Group to allow:
-- Port 5000 (HTTP) from your IP or lab network
-- Port 22 (SSH) from your IP only
+- **Port 80** (HTTP) - for Let's Encrypt validation and HTTP redirect
+- **Port 443** (HTTPS) - for secure HTTPS access
+- **Port 22** (SSH) - from your IP only
 
-**Note:** Redis port 6379 should NOT be exposed (it's bound to localhost only)
+**Important Security Notes:**
+- **DO NOT** expose port 5000 publicly (Flask should only be accessible via Nginx)
+- **DO NOT** expose port 6379 (Redis is bound to localhost only)
+
+**Recommended Security Group Rules:**
+
+| Type  | Protocol | Port Range | Source          | Description              |
+|-------|----------|------------|-----------------|--------------------------|
+| HTTP  | TCP      | 80         | 0.0.0.0/0       | HTTP (for SSL redirect)  |
+| HTTPS | TCP      | 443        | 0.0.0.0/0       | HTTPS (secure access)    |
+| SSH   | TCP      | 22         | Your IP only    | SSH access               |
 
 ## Architecture Overview
 
 ```
+┌─────────────────────────────────────────────────────┐
+│              NGINX (Reverse Proxy)                  │
+│  • Handles HTTPS/SSL (port 443)                     │
+│  • Forwards to Gunicorn (port 5000)                 │
+│  • 20GB upload limit                                │
+└─────────────────────────────────────────────────────┘
+                    ↓
 ┌─────────────────────────────────────────────────────┐
 │           GUNICORN (4 workers)                      │
 │  Handles HTTP requests in parallel                  │
@@ -260,37 +363,26 @@ In AWS Console, configure Security Group to allow:
 ```
 
 **Key Points:**
+- **Nginx**: SSL termination + reverse proxy (HTTPS → HTTP)
 - **Gunicorn workers (4)**: Handle multiple HTTP requests simultaneously
 - **Celery worker (1)**: Process one ML pipeline at a time
 - Users can upload simultaneously, pipelines are queued
 
-## Testing
-
-1. Access the application:
-   ```bash
-   curl http://your-ec2-ip:5000
-   ```
-
-2. Test Redis connection:
-   ```bash
-   redis6-cli -a Moulines1 ping
-   ```
-
-3. Test Celery worker:
-   ```bash
-   # Should show worker logs
-   sudo journalctl -u celery-worker -n 50
-   ```
-
 ## Maintenance Commands
 
 ```bash
+# Test Redis connection
+redis6-cli -a Moulines1 ping
+# Should return: PONG
+
 # Restart services after code changes
 sudo systemctl restart flask-app celery-worker
 
 # View logs in real-time
 sudo journalctl -u flask-app -f
 sudo journalctl -u celery-worker -f
+sudo tail -f /var/log/nginx/sci_access.log
+sudo tail -f /var/log/nginx/sci_error.log
 
 # View last 100 lines of logs
 sudo journalctl -u flask-app -n 100
