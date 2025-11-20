@@ -101,7 +101,8 @@ def run_pipeline_gpu(recording_id, recording_path):
             f"GPU pipeline failed: {message}",
             error_details=error_details
         )
-        raise Exception(f"GPU pipeline failed: {message}")
+        # Don't raise - just return to avoid overwriting error_details in exception handler
+        return f"GPU pipeline failed: {message}"
 
     # Wait for NFS cache sync and verify output
     print("[VALIDATION] Waiting 60s for NFS cache synchronization (acregmin=3s)...")
