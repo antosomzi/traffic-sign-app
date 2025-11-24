@@ -134,9 +134,9 @@ def start_and_run_pipeline_ssh(recording_id):
         print("[GPU] Running real pipeline in Docker (may take several minutes)...")
         docker_cmd = (
             "sudo docker run --rm --gpus all "
-            "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline:/usr/src/app "
+            "-v /home/ec2-user/traffic_sign_pipeline/traffic_sign_pipeline:/usr/src/app "
             f"-v {recording_path}:/data "
-            "-v /home/ec2-user/pipeline_21102025/traffic_sign_pipeline/weights:/usr/src/app/weights "
+            "-v /home/ec2-user/traffic_sign_pipeline/traffic_sign_pipeline/weights:/usr/src/app/weights "
             "traffic-pipeline:gpu -i /data > /home/ec2-user/pipeline.log 2>&1"
         )
         print(f"[GPU] Running: {docker_cmd}")
