@@ -193,6 +193,15 @@ class ExtractionService:
             prog["status"] = "done"
             self.redis_service.set_extraction_progress(job_id, prog)
             
+            # Delete ZIP file after successful extraction (no sudo needed - created by ec2-user)
+            try:
+                if zip_path and os.path.isfile(zip_path):
+                    os.remove(zip_path)
+                    print(f"🗑️ ZIP file deleted: {zip_path}")
+            except OSError as e:
+                # Not critical if deletion fails - log and continue
+                print(f"⚠️ Could not delete ZIP file: {e}")
+            
             print(f"✅ Extraction complete: {zip_top}")
             return zip_top
 
