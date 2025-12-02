@@ -191,15 +191,17 @@
             background: #3b82f6;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 16px;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
             margin-top: 10px;
             transition: background-color 0.2s ease;
+            white-space: nowrap;
+            text-align: center;
         }
 
         .download-btn:hover {
@@ -210,6 +212,13 @@
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+        }
+
+        @media (max-width: 768px) {
+            .download-btn {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
         }
 
         .rerun-btn {
@@ -508,7 +517,7 @@
                             </span>
                         </div>
                         {% if rec.timestamp %}
-                        <div class="timestamp">📅 {{ rec.timestamp[:19].replace('T', ' ') }}</div>
+                        <div class="timestamp" data-timestamp="{{ rec.timestamp }}">📅 <span class="timestamp-text">{{ rec.timestamp[:19].replace('T', ' ') }}</span></div>
                         {% endif %}
                     </div>
                     <div class="recording-header-right">
@@ -573,7 +582,10 @@
                 {% endif %}
 
                 {% if rec.status == "completed" %}
-                <a href="/download/{{ rec.id }}" class="download-btn">📥 Download Results</a>
+                <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                    <a href="/download/{{ rec.id }}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
+                    <a href="/download/{{ rec.id }}/csv-only" class="download-btn">📊 Download CSV Only</a>
+                </div>
                 {% endif %}
             </div>
             {% endfor %}
@@ -687,7 +699,18 @@
             }
 
             try {
-                return timestamp.slice(0, 19).replace('T', ' ');
+                // Parse ISO 8601 timestamp and convert to user's local timezone
+                const date = new Date(timestamp);
+                // Format for US locale: MM/DD/YYYY, HH:MM:SS AM/PM
+                return date.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                });
             } catch (error) {
                 return timestamp;
             }
@@ -782,7 +805,10 @@
                 ? 'Cannot delete while processing'
                 : 'Delete this recording';
             const downloadLink = rec.status === 'completed'
-                ? `<a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Results</a>`
+                ? `<div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                    <a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
+                    <a href="/download/${encodeURIComponent(rec.id)}/csv-only" class="download-btn">📊 Download CSV Only</a>
+                   </div>`
                 : '';
 
             const timestampHtml = timestampText
@@ -1186,6 +1212,18 @@
 
         attachActionListeners();
         scheduleStatusPolling();
+
+        // Convert all timestamps on page load
+        function convertTimestampsOnLoad() {
+            document.querySelectorAll('.timestamp[data-timestamp]').forEach(el => {
+                const timestampISO = el.dataset.timestamp;
+                const textEl = el.querySelector('.timestamp-text');
+                if (textEl && timestampISO) {
+                    textEl.textContent = formatTimestamp(timestampISO);
+                }
+            });
+        }
+        convertTimestampsOnLoad();
 
         // Toggle error details visibility
         window.toggleErrorDetails = function(recordingId) {
