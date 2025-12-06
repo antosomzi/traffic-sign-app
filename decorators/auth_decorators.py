@@ -1,8 +1,10 @@
 """Authentication decorators for route protection"""
 
 from functools import wraps
-from flask import redirect, url_for, flash
+from flask import redirect, url_for, flash, request, jsonify
 from flask_login import current_user
+from models.auth_token import AuthToken
+from models.user import User
 
 
 def login_required(f):
@@ -29,4 +31,82 @@ def admin_required(f):
             return redirect(url_for('status.list_recordings'))
         
         return f(*args, **kwargs)
+    return decorated_function
+
+
+def token_required(f):
+    """Decorator to require valid API token for mobile routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        
+        if not auth_header:
+            return jsonify({"error": "Authorization header missing"}), 401
+        
+        # Extract token (format: "Bearer <token>")
+        try:
+            token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        except IndexError:
+            return jsonify({"error": "Invalid authorization header format"}), 401
+        
+        # Verify token and get user
+        user_id = AuthToken.get_by_token(token)
+        if not user_id:
+            return jsonify({"error": "Invalid or expired token"}), 401
+        
+        user = User.get_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 401
+        
+        # Pass user to the route function
+        return f(user, *args, **kwargs)
+    
+    return decorated_function
+
+
+def auth_required(f):
+    """Decorator that accepts EITHER Flask-Login session OR API token
+    
+    For web requests: Uses Flask-Login session (current_user)
+    For API requests: Uses Authorization header token
+    
+    This allows the same route to work for both web and mobile
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if there's an Authorization header (API request)
+        auth_header = request.headers.get('Authorization')
+        
+        if auth_header:
+            # Mobile API request with token
+            try:
+                token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+                user_id = AuthToken.get_by_token(token)
+                
+                if not user_id:
+                    return jsonify({"error": "Invalid or expired token"}), 401
+                
+                user = User.get_by_id(user_id)
+                if not user:
+                    return jsonify({"error": "User not found"}), 401
+                
+                # Temporarily set current_user for this request
+                from flask_login import login_user
+                login_user(user)
+                
+            except Exception as e:
+                return jsonify({"error": "Invalid authorization header"}), 401
+        
+        # Check Flask-Login session (web request or already logged in from token)
+        if not current_user.is_authenticated:
+            # Web request without login
+            if request.is_json or auth_header:
+                return jsonify({"error": "Authentication required"}), 401
+            else:
+                flash("Please log in to access this page.", "warning")
+                return redirect(url_for('auth.login'))
+        
+        return f(*args, **kwargs)
+    
     return decorated_function

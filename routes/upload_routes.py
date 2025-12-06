@@ -6,6 +6,7 @@ import uuid
 import threading
 from flask import Blueprint, render_template, request, jsonify, current_app
 from flask_login import login_required, current_user
+from decorators.auth_decorators import auth_required
 from config import Config
 from services.redis_service import RedisProgressService
 from services.extraction_service import ExtractionService
@@ -34,7 +35,7 @@ def index():
 
 
 @upload_bp.route("/upload", methods=["POST"])
-@login_required
+@auth_required  # Accepts both web session and API token
 def upload_recording():
     """Handle file upload and queue extraction"""
     if "file" not in request.files:

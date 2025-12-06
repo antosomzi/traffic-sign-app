@@ -59,6 +59,10 @@ def create_app(config_class=Config):
     from routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
     
+    # Import and register mobile auth blueprint
+    from routes.mobile_auth_routes import api_bp
+    app.register_blueprint(api_bp)
+    
     # Register test routes (only active in local mode)
     if os.getenv("USE_GPU_INSTANCE", "false").lower() != "true":
         app.register_blueprint(test_bp)
