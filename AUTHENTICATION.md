@@ -5,7 +5,7 @@ This document explains how authentication works in the Traffic Sign ML Pipeline 
 
 ---
 
-## 1. Authentication Flow
+## 1. Web Authentication Flow (Navigation Bar Login)
 
 ### a. User Login Process
 1. User submits email and password via login form
