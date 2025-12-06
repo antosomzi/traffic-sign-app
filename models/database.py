@@ -70,6 +70,29 @@ def init_db():
         )
     """)
     
+    # Create auth_tokens table (for mobile authentication)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auth_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    
+    # Create indexes for auth_tokens
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_auth_tokens_token 
+        ON auth_tokens(token)
+    """)
+    
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_id 
+        ON auth_tokens(user_id)
+    """)
+    
     conn.commit()
     conn.close()
     

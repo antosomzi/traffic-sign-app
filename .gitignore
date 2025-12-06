@@ -42,6 +42,12 @@ recordings/
 temp_extracts/
 result_pipeline_stable/
 
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
 # IDE
 .vscode/
 .idea/
