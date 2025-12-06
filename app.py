@@ -6,13 +6,17 @@ Refactored modular architecture with:
 - Blueprint-based routing
 - Service layer separation
 - Centralized configuration
+- Authentication with Flask-Login
 """
 
 import os
-from flask import Flask
+from flask import Flask, redirect, url_for
+from flask_login import LoginManager
 from config import Config
 from routes import upload_bp, status_bp, download_bp, delete_bp, rerun_bp
 from routes.test_routes import test_bp
+from routes.auth_routes import auth_bp
+from models.user import User
 
 
 def create_app(config_class=Config):
@@ -28,19 +32,41 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     
     # Flask configuration
-    # MAX_CONTENT_LENGTH is used by Flask to automatically reject large uploads
     app.config["MAX_CONTENT_LENGTH"] = config_class.MAX_CONTENT_LENGTH
+    app.config["SECRET_KEY"] = config_class.SECRET_KEY
+    
+    # Initialize Flask-Login
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"
+    login_manager.login_message = "Please log in to access this page."
+    login_manager.login_message_category = "warning"
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        """Load user by ID for Flask-Login"""
+        return User.get_by_id(int(user_id))
     
     # Register blueprints
+    app.register_blueprint(auth_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(status_bp)
     app.register_blueprint(download_bp)
     app.register_blueprint(delete_bp)
     app.register_blueprint(rerun_bp)
     
+    # Import and register admin blueprint
+    from routes.admin_routes import admin_bp
+    app.register_blueprint(admin_bp)
+    
     # Register test routes (only active in local mode)
     if os.getenv("USE_GPU_INSTANCE", "false").lower() != "true":
         app.register_blueprint(test_bp)
+    
+    # Root route redirect to status
+    @app.route("/")
+    def index():
+        return redirect(url_for('status.list_recordings'))
     
     # Add security headers
     @app.after_request

@@ -5,9 +5,11 @@ import time
 import uuid
 import threading
 from flask import Blueprint, render_template, request, jsonify, current_app
+from flask_login import login_required, current_user
 from config import Config
 from services.redis_service import RedisProgressService
 from services.extraction_service import ExtractionService
+from services.organization_service import OrganizationService
 from utils.file_utils import allowed_file
 
 # Check if Celery is available
@@ -24,13 +26,15 @@ upload_bp = Blueprint("upload", __name__)
 extraction_service = ExtractionService()
 
 
-@upload_bp.route("/", methods=["GET"])
+@upload_bp.route("/upload", methods=["GET"])
+@login_required
 def index():
     """Render the upload page"""
     return render_template("upload.html")
 
 
 @upload_bp.route("/upload", methods=["POST"])
+@login_required
 def upload_recording():
     """Handle file upload and queue extraction"""
     if "file" not in request.files:
@@ -118,6 +122,14 @@ def upload_recording():
         )
         print(f"📦 Extraction completed. recording_id: {recording_id}")
         
+        # Register recording to organization
+        if recording_id:
+            try:
+                OrganizationService.register_recording(recording_id, current_user.organization_id)
+                print(f"✅ Recording {recording_id} registered to org {current_user.organization_id}")
+            except Exception as e:
+                print(f"⚠️ Failed to register recording to organization: {e}")
+        
         # Queue pipeline task if extraction succeeded
         if recording_id and CELERY_AVAILABLE:
             time.sleep(0.5)
@@ -138,6 +150,7 @@ def upload_recording():
 
 
 @upload_bp.route("/extract_status/<job_id>", methods=["GET"])
+@login_required
 def extract_status(job_id):
     """Get extraction status for a job"""
     prog = RedisProgressService.get_extraction_progress(job_id)

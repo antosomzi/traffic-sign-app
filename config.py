@@ -25,6 +25,10 @@ class Config:
     # File upload settings
     ALLOWED_EXTENSIONS = {"zip", "tar", "tar.gz", "tgz"}
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024 * 1024  # 16 GiB
+    
+    # Authentication settings
+    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+    DATABASE_PATH = os.path.join(BASE_PATH, "app.db")
 
 
 # Redis client initialization

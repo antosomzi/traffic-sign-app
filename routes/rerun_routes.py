@@ -4,9 +4,11 @@ import json
 import os
 import shutil
 import subprocess
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, abort
+from flask_login import login_required, current_user
 from config import Config
 from utils.file_utils import create_status_file
+from services.organization_service import OrganizationService
 
 try:
     from pipeline.celery_tasks import run_pipeline_task
@@ -18,8 +20,12 @@ rerun_bp = Blueprint("rerun", __name__)
 
 
 @rerun_bp.route("/rerun/<recording_id>", methods=["POST"])
+@login_required
 def rerun_recording(recording_id: str):
     """Queue the ML pipeline to run again for an existing recording."""
+    # Check if user can access this recording
+    if not OrganizationService.can_access_recording(current_user, recording_id):
+        abort(403)
     recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
 
     if not os.path.isdir(recording_path):

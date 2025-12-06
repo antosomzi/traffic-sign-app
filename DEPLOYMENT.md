@@ -59,10 +59,29 @@ The `.env` file should already exist with the correct password. If not:
 cat > .env <<EOF
 REDIS_PASSWORD=Moulines1
 USE_GPU_INSTANCE=True
+SECRET_KEY=your-long-random-secret-key-here-min-32-chars
 EOF
 ```
 
-### 6. Make Scripts Executable
+### 6. Initialize Authentication Database (First Deployment Only)
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Run database initialization script
+python3 migrations/init_db.py
+
+# This creates:
+# - SQLite database at /home/ec2-user/app.db
+# - Default organization "Default Organization"
+# - Admin user: arevel3@gatech.edu / Admin123!
+# - Migrates existing recordings to default organization
+
+# Change admin password after first login via admin panel
+```
+
+### 7. Make Scripts Executable
 
 ```bash
 chmod +x simulate_pipeline.sh

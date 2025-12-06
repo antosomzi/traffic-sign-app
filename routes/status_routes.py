@@ -4,7 +4,9 @@ import os
 import json
 from datetime import datetime
 from flask import Blueprint, render_template, jsonify
+from flask_login import login_required, current_user
 from config import Config
+from services.organization_service import OrganizationService
 
 status_bp = Blueprint("status", __name__)
 
@@ -23,7 +25,8 @@ STEP_NAMES = [
 ]
 
 
-def _collect_recordings():
+def _collect_recordings(organization_id):
+    """Collect recordings for a specific organization"""
     recordings_root = Config.EXTRACT_FOLDER
 
     all_records = []
@@ -31,7 +34,10 @@ def _collect_recordings():
     if not os.path.isdir(recordings_root):
         return all_records
 
-    for rec_id in os.listdir(recordings_root):
+    # Get recording IDs for this organization from database
+    org_recording_ids = OrganizationService.get_recordings_for_organization(organization_id)
+
+    for rec_id in org_recording_ids:
         rec_folder = os.path.join(recordings_root, rec_id)
         if not os.path.isdir(rec_folder):
             continue
@@ -143,9 +149,10 @@ def _collect_recordings():
 
 
 @status_bp.route("/status", methods=["GET"])
-def status():
-    """Lists all recordings and their processing status."""
-    records = _collect_recordings()
+@login_required
+def list_recordings():
+    """Lists all recordings and their processing status for current user's organization."""
+    records = _collect_recordings(current_user.organization_id)
     return render_template(
         "status.html",
         recordings=records,
@@ -155,7 +162,8 @@ def status():
 
 
 @status_bp.route("/status/data", methods=["GET"])
+@login_required
 def status_data():
     """Returns the recording status data as JSON for AJAX polling."""
-    records = _collect_recordings()
+    records = _collect_recordings(current_user.organization_id)
     return jsonify({"recordings": records})

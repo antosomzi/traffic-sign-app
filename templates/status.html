@@ -15,7 +15,49 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
             min-height: 100vh;
-            padding: 20px;
+        }
+
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .navbar h1 {
+            font-size: 20px;
+            color: #1f2937;
+        }
+        
+        .navbar-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 14px;
+        }
+        
+        .navbar-links a {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        
+        .navbar-links a:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+            text-decoration: none;
+        }
+        
+        .navbar-user {
+            color: #6b7280;
+            font-size: 14px;
         }
 
         .container {
@@ -27,7 +69,7 @@
             padding: 40px;
         }
 
-        h1 {
+        h2 {
             color: #333;
             margin-bottom: 10px;
             font-size: 28px;
@@ -472,6 +514,18 @@
     </style>
 </head>
 <body>
+    <div class="navbar">
+        <h1>🚦 Traffic Sign App</h1>
+        <div class="navbar-links">
+            <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
+            <a href="{{ url_for('upload.index') }}">Upload</a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            {% endif %}
+            <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal">
         <div class="modal">
@@ -488,10 +542,10 @@
     </div>
     <div class="container">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h1>📊 Recording Status</h1>
+            <h2>📊 Recording Status</h2>
             <button class="refresh-btn" id="refreshButton" type="button">🔄 Refresh</button>
         </div>
-        <p class="subtitle">Track the processing progress of your recordings</p>
+        <p class="subtitle">Track the processing progress of your recordings ({{ current_user.organization.name }})</p>
 
         <a href="/" class="nav-link">← Back to Upload</a>
 

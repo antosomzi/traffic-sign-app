@@ -15,6 +15,51 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
             min-height: 100vh;
+        }
+
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar h1 {
+            font-size: 20px;
+            color: #1f2937;
+        }
+        
+        .navbar-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 14px;
+        }
+        
+        .navbar-links a {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        
+        .navbar-links a:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+            text-decoration: none;
+        }
+        
+        .navbar-user {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .page-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -28,7 +73,7 @@
             padding: 40px;
             max-width: 600px;
             width: 100%;
-            margin-top: 40px;
+            margin-top: 20px;
         }
 
         h1 {
@@ -191,9 +236,22 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📤 Upload Recording</h1>
-        <p class="subtitle">Upload your ZIP archive containing recording data</p>
+    <div class="navbar">
+        <h1>🚦 Traffic Sign App</h1>
+        <div class="navbar-links">
+            <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
+            <a href="{{ url_for('status.list_recordings') }}">Recordings</a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            {% endif %}
+            <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="page-wrapper">
+        <div class="container">
+            <h1>📤 Upload Recording</h1>
+            <p class="subtitle">Upload your ZIP archive containing recording data</p>
 
         <div class="upload-area" id="upload-area">
             <div class="upload-icon">📁</div>
@@ -402,5 +460,6 @@
         }
     </script>
     <script src="https://unpkg.com/fflate@0.8.2"></script>
+    </div>
 </body>
 </html>

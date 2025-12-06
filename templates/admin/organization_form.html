@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if mode == 'create' %}Create Organization{% else %}Edit Organization{% endif %} - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar h1 {
+            font-size: 20px;
+            color: #1f2937;
+        }
+        
+        .navbar-links a {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 500;
+            margin-left: 20px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        
+        .navbar-links a:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        
+        .section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 25px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+            margin-left: 10px;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>🛡️ Admin - {% if mode == 'create' %}Create Organization{% else %}Edit Organization{% endif %}</h1>
+        <div class="navbar-links">
+            <a href="{{ url_for('admin.organizations') }}">Back to Organizations</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <div class="section">
+            <h2>{% if mode == 'create' %}Create New Organization{% else %}Edit Organization{% endif %}</h2>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="name">Organization Name *</label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name" 
+                        placeholder="Enter organization name"
+                        required
+                        autofocus
+                    >
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    {% if mode == 'create' %}Create Organization{% else %}Save Changes{% endif %}
+                </button>
+                <a href="{{ url_for('admin.organizations') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
