@@ -90,6 +90,17 @@
             color: white;
         }
         
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
         .btn-sm {
             padding: 6px 12px;
             font-size: 13px;
@@ -197,6 +208,12 @@
                         <td>{{ user.created_at }}</td>
                         <td>
                             <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-primary btn-sm">Edit</a>
+                            <form method="POST" 
+                                  action="{{ url_for('admin.delete_user', user_id=user.id) }}" 
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Are you sure you want to delete {{ user.name }}? This action cannot be undone.');">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}

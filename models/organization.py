@@ -101,3 +101,22 @@ class Organization:
             )
             row = cursor.fetchone()
         return row['count'] if row else 0
+    
+    def update_name(self, name):
+        """Update organization name"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE organizations SET name = ? WHERE id = ?",
+                (name, self.id)
+            )
+        self.name = name
+    
+    def delete(self):
+        """Delete organization and all its users"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            # Delete all users in this organization first
+            cursor.execute("DELETE FROM users WHERE organization_id = ?", (self.id,))
+            # Then delete the organization
+            cursor.execute("DELETE FROM organizations WHERE id = ?", (self.id,))

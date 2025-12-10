@@ -232,6 +232,7 @@
                 </div>
                 {% endif %}
                 {% else %}
+                {% if is_org_owner_view %}
                 <div class="form-group">
                     <label>Email</label>
                     <input type="text" value="{{ user.email }}" disabled>
@@ -246,6 +247,38 @@
                     <label>Organization</label>
                     <input type="text" value="{{ user.organization.name }}" disabled>
                 </div>
+                {% else %}
+                <div class="form-group">
+                    <label for="email">Email Address *</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        value="{{ user.email }}"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        name="name" 
+                        value="{{ user.name }}"
+                        required
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="organization_id">Organization *</label>
+                    <select id="organization_id" name="organization_id" required>
+                        {% for org in organizations %}
+                        <option value="{{ org.id }}" {% if org.id == user.organization_id %}selected{% endif %}>{{ org.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
                 
                 <div class="form-group">
                     <label for="new_password">New Password (optional)</label>
@@ -276,6 +309,7 @@
                         type="checkbox" 
                         id="is_org_owner" 
                         name="is_org_owner" 
+                        value="1"
                         {% if mode == 'edit' and user.is_org_owner %}checked{% endif %}
                     >
                     <label for="is_org_owner">Organization owner (can manage users in their organization)</label>

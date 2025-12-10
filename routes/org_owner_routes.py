@@ -31,7 +31,7 @@ def create_user():
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '').strip()
         name = request.form.get('name', '').strip()
-        is_org_owner = request.form.get('is_org_owner') == 'on'
+        is_org_owner = request.form.get('is_org_owner') == '1'
         
         # Validation
         if not email or not password or not name:
@@ -98,7 +98,7 @@ def edit_user(user_id):
     
     if request.method == 'POST':
         new_password = request.form.get('new_password', '').strip()
-        is_org_owner = request.form.get('is_org_owner') == 'on'
+        is_org_owner = request.form.get('is_org_owner') == '1'
         
         # Org owners CAN promote users to org_owner (but NOT to admin)
         # Update org_owner status

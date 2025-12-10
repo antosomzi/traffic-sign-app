@@ -153,6 +153,7 @@
                         id="name" 
                         name="name" 
                         placeholder="Enter organization name"
+                        {% if mode == 'edit' %}value="{{ organization.name }}"{% endif %}
                         required
                         autofocus
                     >

@@ -178,3 +178,22 @@ class User(UserMixin):
                 (1 if is_org_owner else 0, self.id)
             )
         self.is_org_owner = bool(is_org_owner)
+    
+    def update_fields(self, email, name, organization_id):
+        """Update user fields (email, name, organization)"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE users SET email = ?, name = ?, organization_id = ? WHERE id = ?",
+                (email, name, organization_id, self.id)
+            )
+        self.email = email
+        self.name = name
+        self.organization_id = organization_id
+        self._organization = None  # Reset cached organization
+    
+    def delete(self):
+        """Delete user from database"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM users WHERE id = ?", (self.id,))
