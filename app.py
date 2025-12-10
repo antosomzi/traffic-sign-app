@@ -59,6 +59,10 @@ def create_app(config_class=Config):
     from routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
     
+    # Import and register organization owner blueprint
+    from routes.org_owner_routes import org_owner_bp
+    app.register_blueprint(org_owner_bp)
+    
     # Import and register mobile auth blueprint
     from routes.mobile_auth_routes import api_bp
     app.register_blueprint(api_bp)

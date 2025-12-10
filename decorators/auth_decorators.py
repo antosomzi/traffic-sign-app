@@ -34,6 +34,22 @@ def admin_required(f):
     return decorated_function
 
 
+def org_owner_required(f):
+    """Decorator to require organization owner privileges for a route"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash("Please log in to access this page.", "warning")
+            return redirect(url_for('auth.login'))
+        
+        if not current_user.is_org_owner and not current_user.is_admin:
+            flash("You need organization owner privileges to access this page.", "danger")
+            return redirect(url_for('status.list_recordings'))
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def token_required(f):
     """Decorator to require valid API token for mobile routes"""
     @wraps(f)

@@ -521,6 +521,8 @@
             <a href="{{ url_for('upload.index') }}">Upload</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            {% elif current_user.is_org_owner %}
+            <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
             {% endif %}
             <a href="{{ url_for('auth.logout') }}">Logout</a>
         </div>

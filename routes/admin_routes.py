@@ -107,6 +107,7 @@ def create_user():
         password = request.form.get("password", "").strip()
         organization_id = request.form.get("organization_id", "").strip()
         is_admin = request.form.get("is_admin") == "1"
+        is_org_owner = request.form.get("is_org_owner") == "1"
         
         # Validation
         if not email or not name or not password or not organization_id:
@@ -125,7 +126,8 @@ def create_user():
             password=password,
             name=name,
             organization_id=int(organization_id),
-            is_admin=is_admin
+            is_admin=is_admin,
+            is_org_owner=is_org_owner
         )
         flash(f"User '{user.name}' created successfully!", "success")
         return redirect(url_for('admin.users'))
@@ -146,10 +148,14 @@ def edit_user(user_id):
     
     if request.method == "POST":
         is_admin = request.form.get("is_admin") == "1"
+        is_org_owner = request.form.get("is_org_owner") == "1"
         new_password = request.form.get("new_password", "").strip()
         
         # Update admin status
         user.update_admin_status(is_admin)
+        
+        # Update org owner status
+        user.update_org_owner_status(is_org_owner)
         
         # Update password if provided
         if new_password:

@@ -55,6 +55,7 @@ def init_db():
             name TEXT NOT NULL,
             organization_id INTEGER NOT NULL,
             is_admin INTEGER DEFAULT 0,
+            is_org_owner INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (organization_id) REFERENCES organizations(id)
         )

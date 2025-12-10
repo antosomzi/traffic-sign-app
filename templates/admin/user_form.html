@@ -116,8 +116,12 @@
         }
         
         .btn-primary {
-            background: #667eea;
+            background: #3b82f6;
             color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
         }
         
         .btn-secondary {
@@ -146,10 +150,17 @@
 </head>
 <body>
     <div class="navbar">
+        {% if is_org_owner_view %}
+        <h1>🚦 Manage Users - {% if mode == 'create' %}Create User{% else %}Edit User{% endif %}</h1>
+        <div class="navbar-links">
+            <a href="{{ url_for('org_owner.list_users') }}">Back to Users</a>
+        </div>
+        {% else %}
         <h1>🛡️ Admin - {% if mode == 'create' %}Create User{% else %}Edit User{% endif %}</h1>
         <div class="navbar-links">
             <a href="{{ url_for('admin.users') }}">Back to Users</a>
         </div>
+        {% endif %}
     </div>
     
     <div class="container">
@@ -203,6 +214,13 @@
                     <div class="help-text">User can change this password after first login</div>
                 </div>
                 
+                {% if is_org_owner_view %}
+                <div class="form-group">
+                    <label>Organization</label>
+                    <input type="text" value="{{ organization.name }}" disabled>
+                    <div class="help-text">User will be created in your organization</div>
+                </div>
+                {% else %}
                 <div class="form-group">
                     <label for="organization_id">Organization *</label>
                     <select id="organization_id" name="organization_id" required>
@@ -212,6 +230,7 @@
                         {% endfor %}
                     </select>
                 </div>
+                {% endif %}
                 {% else %}
                 <div class="form-group">
                     <label>Email</label>
@@ -239,6 +258,7 @@
                 </div>
                 {% endif %}
                 
+                {% if not is_org_owner_view %}
                 <div class="form-group-checkbox">
                     <input 
                         type="checkbox" 
@@ -249,11 +269,26 @@
                     >
                     <label for="is_admin">Admin privileges (can manage organizations and users)</label>
                 </div>
+                {% endif %}
+                
+                <div class="form-group-checkbox">
+                    <input 
+                        type="checkbox" 
+                        id="is_org_owner" 
+                        name="is_org_owner" 
+                        {% if mode == 'edit' and user.is_org_owner %}checked{% endif %}
+                    >
+                    <label for="is_org_owner">Organization owner (can manage users in their organization)</label>
+                </div>
                 
                 <button type="submit" class="btn btn-primary">
                     {% if mode == 'create' %}Create User{% else %}Save Changes{% endif %}
                 </button>
+                {% if is_org_owner_view %}
+                <a href="{{ url_for('org_owner.list_users') }}" class="btn btn-secondary">Cancel</a>
+                {% else %}
                 <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Cancel</a>
+                {% endif %}
             </form>
         </div>
     </div>
