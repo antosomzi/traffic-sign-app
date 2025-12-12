@@ -258,7 +258,15 @@ server {
 
     # Allow large file uploads (20GB)
     client_max_body_size 20G;
-    client_body_timeout 300s;
+    
+    # Extended timeouts for large file uploads (1 hour)
+    # At 10 Mbps, 1GB takes ~13 minutes, so 1 hour provides safety margin
+    client_body_timeout 3600s;
+    client_header_timeout 3600s;
+    
+    # Buffer settings for large uploads (write to disk, not memory)
+    client_body_buffer_size 128k;
+    client_body_temp_path /var/lib/nginx/body 1 2;
 
     # Reverse proxy to Flask (Gunicorn on port 5000)
     location / {
@@ -268,10 +276,13 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # Timeouts for long uploads
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
+        # Extended timeouts for long uploads (1 hour)
+        proxy_connect_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_read_timeout 3600s;
+        
+        # Disable buffering for upload progress tracking
+        proxy_request_buffering off;
     }
 }
 ```
