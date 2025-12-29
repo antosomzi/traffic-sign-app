@@ -30,11 +30,24 @@ def create_status_file(recording_path, status, message=""):
     
     status_file = os.path.join(recording_path, "status.json")
     
+    # Load existing data to preserve video_s3_key
+    existing_data = {}
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, "r") as f:
+                existing_data = json.load(f)
+        except Exception:
+            pass
+    
     status_data = {
         "status": status,
         "message": message,
         "timestamp": datetime.datetime.now().isoformat()
     }
+    
+    # Preserve video_s3_key if it exists
+    if existing_data.get("video_s3_key"):
+        status_data["video_s3_key"] = existing_data["video_s3_key"]
     
     with open(status_file, "w") as f:
         json.dump(status_data, f, indent=2)

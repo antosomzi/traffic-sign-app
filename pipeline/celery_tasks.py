@@ -32,11 +32,24 @@ def update_status(recording_path, status, message="", error_details=None):
     """
     status_file = os.path.join(recording_path, "status.json")
 
+    # Load existing status to preserve video_s3_key
+    existing_data = {}
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, "r") as f:
+                existing_data = json.load(f)
+        except Exception:
+            pass
+    
     status_data = {
         "status": status,
         "message": message,
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
+    
+    # Preserve video_s3_key if it exists
+    if existing_data.get("video_s3_key"):
+        status_data["video_s3_key"] = existing_data["video_s3_key"]
     
     # Add error_details if provided (for technical debugging)
     if error_details:
@@ -46,11 +59,89 @@ def update_status(recording_path, status, message="", error_details=None):
         json.dump(status_data, f, indent=2)
 
 
+def download_video_from_s3(recording_path):
+    """Download video from S3 if it was uploaded there.
+    
+    Args:
+        recording_path: Path to the recording directory
+        
+    Returns:
+        Path to local video file or None if no S3 video
+    """
+    status_file = os.path.join(recording_path, "status.json")
+    
+    if not os.path.exists(status_file):
+        return None
+    
+    try:
+        with open(status_file, 'r') as f:
+            status_data = json.load(f)
+        
+        s3_key = status_data.get('video_s3_key')
+        if not s3_key:
+            print("[S3] No video_s3_key in status.json, video is on EFS")
+            return None
+        
+        # Import here to avoid circular imports
+        from services.s3_service import S3VideoService, get_camera_folder
+        s3_service = S3VideoService()
+        
+        # Find or create camera folder
+        camera_folder = get_camera_folder(recording_path)
+        if not camera_folder:
+            # Create camera folder in the IMEI structure
+            for root, dirs, files in os.walk(recording_path):
+                if "IMEINotAvailable" in root or root.count(os.sep) - recording_path.count(os.sep) == 2:
+                    camera_folder = os.path.join(root, "camera")
+                    os.makedirs(camera_folder, exist_ok=True)
+                    break
+        
+        if not camera_folder:
+            print("[S3] ❌ Could not find/create camera folder")
+            return None
+        
+        local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
+        
+        # Download from S3
+        print(f"[S3] 📥 Downloading video from S3 for pipeline...")
+        success = s3_service.download_video(s3_key, local_video_path)
+        
+        if success:
+            print(f"[S3] ✅ Video downloaded to {local_video_path}")
+            return local_video_path
+        else:
+            print(f"[S3] ❌ Failed to download video")
+            return None
+            
+    except Exception as e:
+        print(f"[S3] ❌ Error downloading video: {e}")
+        return None
+
+
+def cleanup_local_video(video_path):
+    """Remove local video after pipeline completes to save EFS space.
+    
+    Args:
+        video_path: Path to local video file
+    """
+    if video_path and os.path.exists(video_path):
+        try:
+            os.remove(video_path)
+            print(f"[S3] 🗑️ Cleaned up temporary video file: {video_path}")
+        except Exception as e:
+            print(f"[S3] ⚠️ Could not cleanup video file: {e}")
+
+
 def run_pipeline_local(recording_id, recording_path):
     """Run pipeline locally on the same instance (original behavior)."""
     result_folder = os.path.join(recording_path, "result_pipeline_stable")
+    local_video_path = None
 
     print(f"[LOCAL] Running pipeline locally for: {recording_id}")
+    
+    # Download video from S3 if needed
+    local_video_path = download_video_from_s3(recording_path)
+    
     update_status(recording_path, "processing", "ML pipeline in progress (local)...")
 
     # Script is in the BASE_PATH directory
@@ -78,6 +169,9 @@ def run_pipeline_local(recording_id, recording_path):
         # Raise with technical details for logging
         raise TimeoutError(f"Pipeline timeout - expected output file not found: {export_csv}")
 
+    # Cleanup local video after successful pipeline (save EFS space)
+    cleanup_local_video(local_video_path)
+
     update_status(recording_path, "completed", "Processing completed successfully.")
 
     return f"Pipeline completed for {recording_id}"
@@ -85,8 +179,14 @@ def run_pipeline_local(recording_id, recording_path):
 
 def run_pipeline_gpu(recording_id, recording_path):
     """Run pipeline on a dedicated GPU instance via SSH."""
+    local_video_path = None
+    
     # Only handles the GPU/SSH/Docker workflow
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
+    
+    # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
+    local_video_path = download_video_from_s3(recording_path)
+    
     update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
 
     # start_and_run_pipeline_ssh now returns 4 values: success, instance_id, message, error_details
@@ -125,6 +225,10 @@ def run_pipeline_gpu(recording_id, recording_path):
         raise FileNotFoundError(f"Expected output file not found: {export_csv}")
 
     print("✅ Output file validated")
+    
+    # Cleanup local video after successful pipeline (save EFS space)
+    cleanup_local_video(local_video_path)
+    
     update_status(
         recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}"
     )

@@ -25,6 +25,7 @@ Web application for uploading, validating, and asynchronously processing traffic
 - **Celery**: Asynchronous worker for ML pipeline processing
 - **Gunicorn**: Production WSGI server with 4 worker processes
 - **Nginx**: Reverse proxy for HTTPS/SSL (production only)
+- **S3**: Video storage (reduces EFS costs). See [`S3_STORAGE.md`](S3_STORAGE.md)
 
 ### Execution Modes
 
@@ -111,6 +112,7 @@ app/
 ├── .env                        # Environment variables
 ├── DEPLOYMENT.md               # EC2 deployment guide
 ├── EC2_GPU_CONFIG.md           # GPU instance setup
+├── S3_STORAGE.md               # S3 video storage documentation
 ├── routes/                     # Blueprint-based routing
 │   ├── upload_routes.py       # Upload & extraction endpoints
 │   ├── status_routes.py       # Status monitoring
@@ -118,7 +120,10 @@ app/
 ├── services/                   # Business logic layer
 │   ├── redis_service.py       # Redis operations
 │   ├── validation_service.py  # Structure validation
-│   └── extraction_service.py  # ZIP extraction logic
+│   ├── extraction_service.py  # ZIP extraction logic
+│   └── s3_service.py          # S3 video storage operations
+├── migrations/                 # Database and data migrations
+│   └── migrate_videos_to_s3.py # Migrate existing videos to S3
 ├── utils/                      # Utility functions
 │   ├── file_utils.py          # File operations
 │   └── cleanup_utils.py       # macOS file cleanup

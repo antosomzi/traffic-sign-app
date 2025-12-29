@@ -185,6 +185,34 @@ class ExtractionService:
 
             # Create initial status file
             create_status_file(final_path, "validated", "Upload and validation successful, awaiting processing.")
+            
+            # Upload video to S3 and remove local copy to save EFS space
+            try:
+                from services.s3_service import S3VideoService, find_video_in_recording
+                s3_service = S3VideoService()
+                video_path = find_video_in_recording(final_path)
+                
+                if video_path:
+                    print(f"📤 Uploading video to S3: {video_path}")
+                    s3_key = s3_service.upload_video(video_path, zip_top)
+                    
+                    # Update status.json with S3 reference
+                    status_file = os.path.join(final_path, "status.json")
+                    import json
+                    with open(status_file, 'r') as f:
+                        status_data = json.load(f)
+                    status_data['video_s3_key'] = s3_key
+                    with open(status_file, 'w') as f:
+                        json.dump(status_data, f, indent=2)
+                    
+                    # Delete local video to save EFS space
+                    os.remove(video_path)
+                    print(f"✅ Video uploaded to S3, local copy deleted")
+                else:
+                    print(f"⚠️ No video file found in recording")
+            except Exception as s3_error:
+                # Log but don't fail - video stays on EFS if S3 fails
+                print(f"⚠️ S3 upload failed, video remains on EFS: {s3_error}")
 
             # Calculate size and mark as done
             size_bytes = compute_folder_size(final_path)

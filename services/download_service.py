@@ -66,12 +66,44 @@ def find_gps_files(rec_folder: str) -> List[str]:
 
 
 def find_video_file(rec_folder: str) -> Optional[str]:
-    """Find the MP4 video file in the camera folder."""
+    """Find the MP4 video file - check local EFS first, then download from S3."""
+    # Check local EFS first
     for root, dirs, files in os.walk(rec_folder):
         if "camera" in root:
             for f in files:
                 if f.endswith(".mp4"):
                     return os.path.join(root, f)
+    
+    # No local video found - check if it's on S3
+    status_file = os.path.join(rec_folder, "status.json")
+    if os.path.exists(status_file):
+        try:
+            import json
+            with open(status_file, 'r') as f:
+                status_data = json.load(f)
+            
+            s3_key = status_data.get('video_s3_key')
+            if s3_key:
+                from services.s3_service import S3VideoService, get_camera_folder
+                s3_service = S3VideoService()
+                
+                # Find camera folder for download destination
+                camera_folder = get_camera_folder(rec_folder)
+                if not camera_folder:
+                    # Try to find IMEI folder and create camera subfolder
+                    for root, dirs, files in os.walk(rec_folder):
+                        if "IMEINotAvailable" in root or root.count(os.sep) - rec_folder.count(os.sep) == 2:
+                            camera_folder = os.path.join(root, "camera")
+                            os.makedirs(camera_folder, exist_ok=True)
+                            break
+                
+                if camera_folder:
+                    local_path = os.path.join(camera_folder, os.path.basename(s3_key))
+                    print(f"📥 Downloading video from S3 for download...")
+                    if s3_service.download_video(s3_key, local_path):
+                        return local_path
+        except Exception as e:
+            print(f"⚠️ Error downloading video from S3: {e}")
     
     return None
 
