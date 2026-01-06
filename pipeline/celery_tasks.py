@@ -70,75 +70,83 @@ def download_video_from_s3(recording_path):
     Returns:
         Path to local video file or None if no S3 video
     """
+    # DEBUG
+    debug_log = "/home/ec2-user/debug_celery.log"
+    def debug(msg):
+        with open(debug_log, "a") as f:
+            f.write(f"[{__import__('datetime').datetime.now()}] [S3] {msg}\n")
+    
     status_file = os.path.join(recording_path, "status.json")
     
-    print(f"[S3] 🔍 Checking for S3 video in: {recording_path}", flush=True)
+    debug(f"Checking for S3 video in: {recording_path}")
+    debug(f"Status file: {status_file}")
+    debug(f"Status file exists: {os.path.exists(status_file)}")
     
     if not os.path.exists(status_file):
-        print(f"[S3] ⚠️ Status file not found: {status_file}", flush=True)
+        debug("Status file not found, returning None")
         return None
     
     try:
         with open(status_file, 'r') as f:
             status_data = json.load(f)
         
-        print(f"[S3] 📄 Status data keys: {list(status_data.keys())}", flush=True)
+        debug(f"Status data keys: {list(status_data.keys())}")
         
         s3_key = status_data.get('video_s3_key')
-        if not s3_key:
-            print("[S3] No video_s3_key in status.json, video is on EFS", flush=True)
-            return None
+        debug(f"video_s3_key: {s3_key}")
         
-        print(f"[S3] 🔑 Found S3 key: {s3_key}", flush=True)
+        if not s3_key:
+            debug("No video_s3_key, returning None")
+            return None
         
         # Get camera folder path from status.json
         camera_folder_relative = status_data.get('camera_folder')
+        debug(f"camera_folder: {camera_folder_relative}")
+        
         if not camera_folder_relative:
-            print("[S3] ⚠️ No camera_folder in status.json, trying to find it...", flush=True)
+            debug("No camera_folder in status.json, trying to find it...")
             # Fallback: try to find camera folder
             from services.s3_service import get_camera_folder
             camera_folder = get_camera_folder(recording_path)
             if not camera_folder:
-                print("[S3] ❌ Could not find camera folder", flush=True)
+                debug("Could not find camera folder, returning None")
                 return None
         else:
             # Use stored path
             camera_folder = os.path.join(recording_path, camera_folder_relative)
-            print(f"[S3] 📁 Camera folder: {camera_folder}", flush=True)
+            debug(f"Full camera folder path: {camera_folder}")
         
         # Create camera folder if it doesn't exist
         os.makedirs(camera_folder, exist_ok=True)
-        print(f"[S3] ✅ Camera folder created/verified: {camera_folder}", flush=True)
         
         # Import here to avoid circular imports
         from services.s3_service import S3VideoService
         s3_service = S3VideoService()
         
         local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
-        print(f"[S3] 🎯 Target video path: {local_video_path}", flush=True)
+        debug(f"Target video path: {local_video_path}")
         
         # Download from S3
-        print(f"[S3] 📥 Downloading video from S3 for pipeline...", flush=True)
+        debug("Starting S3 download...")
         success = s3_service.download_video(s3_key, local_video_path)
+        debug(f"Download success: {success}")
         
         if success:
-            print(f"[S3] ✅ Video downloaded to {local_video_path}", flush=True)
-            # Verify file exists and has size
             if os.path.exists(local_video_path):
                 size_mb = os.path.getsize(local_video_path) / (1024 * 1024)
-                print(f"[S3] ✅ File verified: {size_mb:.2f} MB", flush=True)
+                debug(f"File verified: {size_mb:.2f} MB")
             else:
-                print(f"[S3] ❌ File not found after download!", flush=True)
+                debug("File not found after download!")
                 return None
             return local_video_path
         else:
-            print(f"[S3] ❌ Failed to download video", flush=True)
+            debug("Download failed, returning None")
             return None
             
     except Exception as e:
-        print(f"[S3] ❌ Error downloading video: {e}", flush=True)
+        debug(f"Exception: {e}")
         import traceback
-        traceback.print_exc()
+        debug(traceback.format_exc())
         return None
 
 
