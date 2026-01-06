@@ -598,8 +598,7 @@
                         <button
                             class="delete-btn"
                             data-recording-id="{{ rec.id }}"
-                            {% if rec.status == "processing" %}disabled{% endif %}
-                            title="{% if rec.status == 'processing' %}Cannot delete while processing{% else %}Delete this recording{% endif %}"
+                            title="Delete this recording"
                         >
                             ×
                         </button>
@@ -853,13 +852,10 @@
             const badge = buildStatusBadge(rec);
             const timestampText = formatTimestamp(rec.timestamp);
             const rerunDisabled = rec.status === 'processing';
-            const deleteDisabled = rec.status === 'processing';
             const rerunTitle = rerunDisabled
                 ? 'Cannot re-run while processing'
                 : 'Re-run pipeline for this recording';
-            const deleteTitle = deleteDisabled
-                ? 'Cannot delete while processing'
-                : 'Delete this recording';
+            const deleteTitle = 'Delete this recording';
             const downloadLink = rec.status === 'completed'
                 ? `<div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
                     <a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
@@ -903,7 +899,6 @@
                         <button
                             class="delete-btn"
                             data-recording-id="${escapeHtml(rec.id)}"
-                            ${deleteDisabled ? 'disabled' : ''}
                             title="${escapeHtml(deleteTitle)}"
                         >
                             ×
