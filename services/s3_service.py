@@ -53,21 +53,14 @@ class S3VideoService:
         """
         try:
             # Ensure directory exists
-            local_dir = os.path.dirname(local_path)
-            print(f"📁 Ensuring directory exists: {local_dir}")
-            os.makedirs(local_dir, exist_ok=True)
-            
-            print(f"📥 Downloading video from S3...")
-            print(f"   Bucket: {self.bucket}")
-            print(f"   Key: {s3_key}")
-            print(f"   Local path: {local_path}")
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
             
             self.s3_client.download_file(self.bucket, s3_key, local_path)
             
             # Verify download
             if os.path.exists(local_path):
                 size_mb = os.path.getsize(local_path) / (1024 * 1024)
-                print(f"✅ Video downloaded successfully: {size_mb:.2f} MB")
+                print(f"✅ Video downloaded from S3: {size_mb:.2f} MB")
             else:
                 print(f"❌ File not found after download!")
                 return False
@@ -75,13 +68,9 @@ class S3VideoService:
             return True
         except ClientError as e:
             print(f"❌ S3 ClientError: {e}")
-            print(f"   Error code: {e.response.get('Error', {}).get('Code', 'Unknown')}")
-            print(f"   Error message: {e.response.get('Error', {}).get('Message', 'Unknown')}")
             return False
         except Exception as e:
-            print(f"❌ Unexpected error downloading from S3: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Error downloading from S3: {e}")
             return False
     
     def delete_video(self, s3_key: str) -> bool:
