@@ -92,7 +92,34 @@ def migrate_recording(
     # Check if already migrated
     existing_s3_key = get_s3_key_from_status(recording_path)
     if existing_s3_key:
-        # Already on S3 - but maybe local file still exists?
+        # Already on S3 - check if camera_folder is missing in status.json
+        status_file = os.path.join(recording_path, "status.json")
+        needs_camera_folder = False
+        
+        if os.path.exists(status_file):
+            try:
+                with open(status_file, 'r') as f:
+                    status_data = json.load(f)
+                if 'camera_folder' not in status_data and video_path:
+                    needs_camera_folder = True
+            except Exception:
+                pass
+        
+        # Update status.json with missing camera_folder
+        if needs_camera_folder:
+            if update_status_with_s3_key(recording_path, existing_s3_key, video_path):
+                result["status"] = "updated"
+                result["message"] = f"Added missing camera_folder to status.json"
+                
+                # Delete local file if requested
+                if delete_local:
+                    size_bytes = os.path.getsize(video_path)
+                    result["size_mb"] = size_bytes / (1024 * 1024)
+                    os.remove(video_path)
+                    result["message"] += f" and deleted local file ({result['size_mb']:.1f} MB)"
+                return result
+        
+        # Already on S3 with camera_folder - maybe delete local file?
         if video_path and delete_local:
             size_bytes = os.path.getsize(video_path)
             result["size_mb"] = size_bytes / (1024 * 1024)
@@ -230,13 +257,14 @@ def main():
             "migrated": "✅",
             "would_migrate": "🔄",
             "cleaned": "🗑️",
+            "updated": "📝",
             "error": "❌"
         }.get(result["status"], "❓")
         
         print(f"   {status_emoji} {result['message']}")
         
         stats[result["status"]] = stats.get(result["status"], 0) + 1
-        if result["status"] in ["migrated", "would_migrate", "cleaned"]:
+        if result["status"] in ["migrated", "would_migrate", "cleaned", "updated"]:
             stats["total_size_mb"] += result["size_mb"]
     
     # Summary
@@ -251,6 +279,7 @@ def main():
         print("\n💡 Run without --dry-run to actually migrate")
     else:
         print(f"Migrated: {stats['migrated']} recording(s)")
+        print(f"Updated (added camera_folder): {stats.get('updated', 0)}")
         print(f"Cleaned (local deleted): {stats.get('cleaned', 0)}")
         print(f"Errors: {stats['error']}")
         print(f"Skipped: {stats['skipped']}")
