@@ -72,17 +72,24 @@ def download_video_from_s3(recording_path):
     """
     status_file = os.path.join(recording_path, "status.json")
     
+    print(f"[S3] 🔍 Checking for S3 video in: {recording_path}")
+    
     if not os.path.exists(status_file):
+        print(f"[S3] ⚠️ Status file not found: {status_file}")
         return None
     
     try:
         with open(status_file, 'r') as f:
             status_data = json.load(f)
         
+        print(f"[S3] 📄 Status data: {json.dumps(status_data, indent=2)}")
+        
         s3_key = status_data.get('video_s3_key')
         if not s3_key:
             print("[S3] No video_s3_key in status.json, video is on EFS")
             return None
+        
+        print(f"[S3] 🔑 Found S3 key: {s3_key}")
         
         # Get camera folder path from status.json
         camera_folder_relative = status_data.get('camera_folder')
@@ -97,15 +104,18 @@ def download_video_from_s3(recording_path):
         else:
             # Use stored path
             camera_folder = os.path.join(recording_path, camera_folder_relative)
+            print(f"[S3] 📁 Camera folder: {camera_folder}")
         
         # Create camera folder if it doesn't exist
         os.makedirs(camera_folder, exist_ok=True)
+        print(f"[S3] ✅ Camera folder created/verified: {camera_folder}")
         
         # Import here to avoid circular imports
         from services.s3_service import S3VideoService
         s3_service = S3VideoService()
         
         local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
+        print(f"[S3] 🎯 Target video path: {local_video_path}")
         
         # Download from S3
         print(f"[S3] 📥 Downloading video from S3 for pipeline...")
@@ -113,6 +123,13 @@ def download_video_from_s3(recording_path):
         
         if success:
             print(f"[S3] ✅ Video downloaded to {local_video_path}")
+            # Verify file exists and has size
+            if os.path.exists(local_video_path):
+                size_mb = os.path.getsize(local_video_path) / (1024 * 1024)
+                print(f"[S3] ✅ File verified: {size_mb:.2f} MB")
+            else:
+                print(f"[S3] ❌ File not found after download!")
+                return None
             return local_video_path
         else:
             print(f"[S3] ❌ Failed to download video")
@@ -120,6 +137,8 @@ def download_video_from_s3(recording_path):
             
     except Exception as e:
         print(f"[S3] ❌ Error downloading video: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -164,6 +183,9 @@ def run_pipeline_local(recording_id, recording_path):
         elapsed += 10
 
     if not os.path.isfile(export_csv):
+        # Cleanup video before raising error
+        cleanup_local_video(local_video_path)
+        
         # Friendly message for no signs detected (instead of timeout error)
         user_friendly_message = (
             "No traffic signs detected in this recording. The video may not contain any "
@@ -199,6 +221,9 @@ def run_pipeline_gpu(recording_id, recording_path):
     success, instance_id, message, error_details = result if len(result) == 4 else (*result, {})
 
     if not success:
+        # Cleanup video even on error
+        cleanup_local_video(local_video_path)
+        
         # Store both user-friendly message and technical error details
         update_status(
             recording_path, 
@@ -219,6 +244,9 @@ def run_pipeline_gpu(recording_id, recording_path):
     print(f"[VALIDATION] Checking for output file: {export_csv}")
 
     if not os.path.isfile(export_csv):
+        # Cleanup video before raising error
+        cleanup_local_video(local_video_path)
+        
         # Friendly message for no signs detected (instead of technical error path)
         user_friendly_message = (
             "No traffic signs detected in this recording. The video may not contain any "
