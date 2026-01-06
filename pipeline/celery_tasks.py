@@ -141,108 +141,154 @@ def run_pipeline_local(recording_id, recording_path):
     """Run pipeline locally on the same instance (original behavior)."""
     result_folder = os.path.join(recording_path, "result_pipeline_stable")
     local_video_path = None
-    
-    # Download video from S3 if needed
-    local_video_path = download_video_from_s3(recording_path)
-    
-    update_status(recording_path, "processing", "ML pipeline in progress (local)...")
 
-    # Script is in the BASE_PATH directory
-    pipeline_script = os.path.join(BASE_PATH, "simulate_pipeline.sh")
-    cmd = f"bash {pipeline_script} {recording_path}"
-
-    subprocess.run(cmd, shell=True, check=True)
-
-    export_csv = os.path.join(result_folder, "s7_export_csv", "supports.csv")
-
-    max_wait = 3600  # 1 hour max
-    elapsed = 0
-    while not os.path.isfile(export_csv) and elapsed < max_wait:
-        time.sleep(10)
-        elapsed += 10
-
-    if not os.path.isfile(export_csv):
-        # Cleanup video before raising error
-        cleanup_local_video(local_video_path)
+    try:
+        # Check if recording still exists before starting
+        if not os.path.exists(recording_path):
+            return f"Recording {recording_id} was deleted before pipeline started"
         
-        # Friendly message for no signs detected (instead of timeout error)
-        user_friendly_message = (
-            "No traffic signs detected in this recording. The video may not contain any "
-            "recognizable traffic signs or the recording quality may be insufficient."
-        )
-        update_status(recording_path, "error", user_friendly_message)
+        # Download video from S3 if needed
+        local_video_path = download_video_from_s3(recording_path)
+        
+        # Check again after download
+        if not os.path.exists(recording_path):
+            cleanup_local_video(local_video_path)
+            return f"Recording {recording_id} was deleted during video download"
+        
+        update_status(recording_path, "processing", "ML pipeline in progress (local)...")
 
-        # Raise with technical details for logging
-        raise TimeoutError(f"Pipeline timeout - expected output file not found: {export_csv}")
+        # Script is in the BASE_PATH directory
+        pipeline_script = os.path.join(BASE_PATH, "simulate_pipeline.sh")
+        cmd = f"bash {pipeline_script} {recording_path}"
 
-    # Cleanup local video after successful pipeline (save EFS space)
-    cleanup_local_video(local_video_path)
+        subprocess.run(cmd, shell=True, check=True)
 
-    update_status(recording_path, "completed", "Processing completed successfully.")
+        export_csv = os.path.join(result_folder, "s7_export_csv", "supports.csv")
 
-    return f"Pipeline completed for {recording_id}"
+        max_wait = 3600  # 1 hour max
+        elapsed = 0
+        while not os.path.isfile(export_csv) and elapsed < max_wait:
+            # Check if recording still exists during wait
+            if not os.path.exists(recording_path):
+                cleanup_local_video(local_video_path)
+                return f"Recording {recording_id} was deleted during pipeline execution"
+            
+            time.sleep(10)
+            elapsed += 10
+
+        if not os.path.isfile(export_csv):
+            # Cleanup video before raising error
+            cleanup_local_video(local_video_path)
+            
+            # Friendly message for no signs detected (instead of timeout error)
+            user_friendly_message = (
+                "No traffic signs detected in this recording. The video may not contain any "
+                "recognizable traffic signs or the recording quality may be insufficient."
+            )
+            if os.path.exists(recording_path):
+                update_status(recording_path, "error", user_friendly_message)
+
+            # Raise with technical details for logging
+            raise TimeoutError(f"Pipeline timeout - expected output file not found: {export_csv}")
+
+        # Cleanup local video after successful pipeline (save EFS space)
+        cleanup_local_video(local_video_path)
+
+        if os.path.exists(recording_path):
+            update_status(recording_path, "completed", "Processing completed successfully.")
+
+        return f"Pipeline completed for {recording_id}"
+    
+    except Exception as e:
+        # Always cleanup video on any exception
+        cleanup_local_video(local_video_path)
+        raise
 
 
 def run_pipeline_gpu(recording_id, recording_path):
     """Run pipeline on a dedicated GPU instance via SSH."""
     local_video_path = None
 
-    # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
-    local_video_path = download_video_from_s3(recording_path)
-    
-    update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
+    try:
+        # Check if recording still exists before starting
+        if not os.path.exists(recording_path):
+            return f"Recording {recording_id} was deleted before pipeline started"
+        
+        # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
+        local_video_path = download_video_from_s3(recording_path)
+        
+        # Check again after download (user might have deleted during download)
+        if not os.path.exists(recording_path):
+            cleanup_local_video(local_video_path)
+            return f"Recording {recording_id} was deleted during video download"
+        
+        update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
 
-    # start_and_run_pipeline_ssh now returns 4 values: success, instance_id, message, error_details
-    result = start_and_run_pipeline_ssh(recording_id)
-    success, instance_id, message, error_details = result if len(result) == 4 else (*result, {})
+        # start_and_run_pipeline_ssh now returns 4 values: success, instance_id, message, error_details
+        result = start_and_run_pipeline_ssh(recording_id)
+        success, instance_id, message, error_details = result if len(result) == 4 else (*result, {})
 
-    if not success:
-        # Cleanup video even on error
+        # Check if recording still exists after pipeline execution
+        if not os.path.exists(recording_path):
+            cleanup_local_video(local_video_path)
+            return f"Recording {recording_id} was deleted during pipeline execution"
+
+        if not success:
+            # Cleanup video even on error
+            cleanup_local_video(local_video_path)
+            
+            # Store both user-friendly message and technical error details
+            update_status(
+                recording_path, 
+                "error", 
+                f"GPU pipeline failed: {message}",
+                error_details=error_details
+            )
+            return f"GPU pipeline failed: {message}"
+
+        # Wait for NFS cache sync and verify output
+        print("[VALIDATION] Waiting 60s for NFS cache synchronization (acregmin=3s)...")
+        time.sleep(60)
+
+        # Check if recording still exists after wait
+        if not os.path.exists(recording_path):
+            cleanup_local_video(local_video_path)
+            return f"Recording {recording_id} was deleted during validation wait"
+
+        export_csv = os.path.join(
+            recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv"
+        )
+        print(f"[VALIDATION] Checking for output file: {export_csv}")
+
+        if not os.path.isfile(export_csv):
+            # Cleanup video before raising error
+            cleanup_local_video(local_video_path)
+            
+            # Friendly message for no signs detected (instead of technical error path)
+            user_friendly_message = (
+                "No traffic signs detected in this recording. The video may not contain any "
+                "recognizable traffic signs or the recording quality may be insufficient."
+            )
+            update_status(recording_path, "error", user_friendly_message)
+
+            # Raise with technical details for logging, but user sees friendly message
+            raise FileNotFoundError(f"Expected output file not found: {export_csv}")
+
+        print("✅ Output file validated")
+        
+        # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)
         
-        # Store both user-friendly message and technical error details
         update_status(
-            recording_path, 
-            "error", 
-            f"GPU pipeline failed: {message}",
-            error_details=error_details
+            recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}"
         )
-        # Don't raise - just return to avoid overwriting error_details in exception handler
-        return f"GPU pipeline failed: {message}"
 
-    # Wait for NFS cache sync and verify output
-    print("[VALIDATION] Waiting 60s for NFS cache synchronization (acregmin=3s)...")
-    time.sleep(60)
-
-    export_csv = os.path.join(
-        recording_path, "result_pipeline_stable", "s7_export_csv", "supports.csv"
-    )
-    print(f"[VALIDATION] Checking for output file: {export_csv}")
-
-    if not os.path.isfile(export_csv):
-        # Cleanup video before raising error
+        return f"Pipeline completed for {recording_id} on GPU instance {instance_id}"
+    
+    except Exception as e:
+        # Always cleanup video on any exception
         cleanup_local_video(local_video_path)
-        
-        # Friendly message for no signs detected (instead of technical error path)
-        user_friendly_message = (
-            "No traffic signs detected in this recording. The video may not contain any "
-            "recognizable traffic signs or the recording quality may be insufficient."
-        )
-        update_status(recording_path, "error", user_friendly_message)
-
-        # Raise with technical details for logging, but user sees friendly message
-        raise FileNotFoundError(f"Expected output file not found: {export_csv}")
-
-    print("✅ Output file validated")
-    
-    # Cleanup local video after successful pipeline (save EFS space)
-    cleanup_local_video(local_video_path)
-    
-    update_status(
-        recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}"
-    )
-
-    return f"Pipeline completed for {recording_id} on GPU instance {instance_id}"
+        raise
 
 
 @celery.task

@@ -10,7 +10,8 @@ from config import Config
 
 def can_delete_recording(recording_id: str) -> Tuple[bool, str]:
     """
-    Check if a recording can be deleted (not currently processing)
+    Check if a recording can be deleted.
+    Now allows deletion even during processing - the pipeline will handle cleanup.
     
     Args:
         recording_id: The recording ID to check
@@ -22,28 +23,6 @@ def can_delete_recording(recording_id: str) -> Tuple[bool, str]:
     
     if not os.path.exists(recording_path):
         return False, "Recording not found"
-    
-    # Check status.json
-    status_file = os.path.join(recording_path, "status.json")
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, "r") as f:
-                status_data = json.load(f)
-                current_status = status_data.get("status", "")
-
-                if current_status == "processing":
-                    final_result = os.path.join(
-                        recording_path,
-                        "result_pipeline_stable",
-                        "s7_export_csv",
-                        "supports.csv"
-                    )
-
-                    if not os.path.isfile(final_result):
-                        return False, "Cannot delete: recording is currently processing"
-        except Exception:
-            # If we can't read status, assume it's safe to delete
-            pass
     
     return True, "OK"
 
