@@ -82,23 +82,26 @@ def download_video_from_s3(recording_path):
             print("[S3] No video_s3_key in status.json, video is on EFS")
             return None
         
+        # Get camera folder path from status.json
+        camera_folder_relative = status_data.get('camera_folder')
+        if not camera_folder_relative:
+            print("[S3] ⚠️ No camera_folder in status.json, trying to find it...")
+            # Fallback: try to find camera folder
+            from services.s3_service import get_camera_folder
+            camera_folder = get_camera_folder(recording_path)
+            if not camera_folder:
+                print("[S3] ❌ Could not find camera folder")
+                return None
+        else:
+            # Use stored path
+            camera_folder = os.path.join(recording_path, camera_folder_relative)
+        
+        # Create camera folder if it doesn't exist
+        os.makedirs(camera_folder, exist_ok=True)
+        
         # Import here to avoid circular imports
-        from services.s3_service import S3VideoService, get_camera_folder
+        from services.s3_service import S3VideoService
         s3_service = S3VideoService()
-        
-        # Find or create camera folder
-        camera_folder = get_camera_folder(recording_path)
-        if not camera_folder:
-            # Create camera folder in the IMEI structure
-            for root, dirs, files in os.walk(recording_path):
-                if "IMEINotAvailable" in root or root.count(os.sep) - recording_path.count(os.sep) == 2:
-                    camera_folder = os.path.join(root, "camera")
-                    os.makedirs(camera_folder, exist_ok=True)
-                    break
-        
-        if not camera_folder:
-            print("[S3] ❌ Could not find/create camera folder")
-            return None
         
         local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
         

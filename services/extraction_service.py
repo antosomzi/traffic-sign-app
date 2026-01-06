@@ -196,12 +196,17 @@ class ExtractionService:
                     print(f"📤 Uploading video to S3: {video_path}")
                     s3_key = s3_service.upload_video(video_path, zip_top)
                     
-                    # Update status.json with S3 reference
+                    # Store camera folder path relative to recording root
+                    camera_folder = os.path.dirname(video_path)
+                    camera_folder_relative = os.path.relpath(camera_folder, final_path)
+                    
+                    # Update status.json with S3 reference and camera folder path
                     status_file = os.path.join(final_path, "status.json")
                     import json
                     with open(status_file, 'r') as f:
                         status_data = json.load(f)
                     status_data['video_s3_key'] = s3_key
+                    status_data['camera_folder'] = camera_folder_relative
                     with open(status_file, 'w') as f:
                         json.dump(status_data, f, indent=2)
                     
