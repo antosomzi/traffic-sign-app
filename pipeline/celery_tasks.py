@@ -72,71 +72,71 @@ def download_video_from_s3(recording_path):
     """
     status_file = os.path.join(recording_path, "status.json")
     
-    print(f"[S3] 🔍 Checking for S3 video in: {recording_path}")
+    print(f"[S3] 🔍 Checking for S3 video in: {recording_path}", flush=True)
     
     if not os.path.exists(status_file):
-        print(f"[S3] ⚠️ Status file not found: {status_file}")
+        print(f"[S3] ⚠️ Status file not found: {status_file}", flush=True)
         return None
     
     try:
         with open(status_file, 'r') as f:
             status_data = json.load(f)
         
-        print(f"[S3] 📄 Status data: {json.dumps(status_data, indent=2)}")
+        print(f"[S3] 📄 Status data keys: {list(status_data.keys())}", flush=True)
         
         s3_key = status_data.get('video_s3_key')
         if not s3_key:
-            print("[S3] No video_s3_key in status.json, video is on EFS")
+            print("[S3] No video_s3_key in status.json, video is on EFS", flush=True)
             return None
         
-        print(f"[S3] 🔑 Found S3 key: {s3_key}")
+        print(f"[S3] 🔑 Found S3 key: {s3_key}", flush=True)
         
         # Get camera folder path from status.json
         camera_folder_relative = status_data.get('camera_folder')
         if not camera_folder_relative:
-            print("[S3] ⚠️ No camera_folder in status.json, trying to find it...")
+            print("[S3] ⚠️ No camera_folder in status.json, trying to find it...", flush=True)
             # Fallback: try to find camera folder
             from services.s3_service import get_camera_folder
             camera_folder = get_camera_folder(recording_path)
             if not camera_folder:
-                print("[S3] ❌ Could not find camera folder")
+                print("[S3] ❌ Could not find camera folder", flush=True)
                 return None
         else:
             # Use stored path
             camera_folder = os.path.join(recording_path, camera_folder_relative)
-            print(f"[S3] 📁 Camera folder: {camera_folder}")
+            print(f"[S3] 📁 Camera folder: {camera_folder}", flush=True)
         
         # Create camera folder if it doesn't exist
         os.makedirs(camera_folder, exist_ok=True)
-        print(f"[S3] ✅ Camera folder created/verified: {camera_folder}")
+        print(f"[S3] ✅ Camera folder created/verified: {camera_folder}", flush=True)
         
         # Import here to avoid circular imports
         from services.s3_service import S3VideoService
         s3_service = S3VideoService()
         
         local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
-        print(f"[S3] 🎯 Target video path: {local_video_path}")
+        print(f"[S3] 🎯 Target video path: {local_video_path}", flush=True)
         
         # Download from S3
-        print(f"[S3] 📥 Downloading video from S3 for pipeline...")
+        print(f"[S3] 📥 Downloading video from S3 for pipeline...", flush=True)
         success = s3_service.download_video(s3_key, local_video_path)
         
         if success:
-            print(f"[S3] ✅ Video downloaded to {local_video_path}")
+            print(f"[S3] ✅ Video downloaded to {local_video_path}", flush=True)
             # Verify file exists and has size
             if os.path.exists(local_video_path):
                 size_mb = os.path.getsize(local_video_path) / (1024 * 1024)
-                print(f"[S3] ✅ File verified: {size_mb:.2f} MB")
+                print(f"[S3] ✅ File verified: {size_mb:.2f} MB", flush=True)
             else:
-                print(f"[S3] ❌ File not found after download!")
+                print(f"[S3] ❌ File not found after download!", flush=True)
                 return None
             return local_video_path
         else:
-            print(f"[S3] ❌ Failed to download video")
+            print(f"[S3] ❌ Failed to download video", flush=True)
             return None
             
     except Exception as e:
-        print(f"[S3] ❌ Error downloading video: {e}")
+        print(f"[S3] ❌ Error downloading video: {e}", flush=True)
         import traceback
         traceback.print_exc()
         return None
@@ -209,10 +209,15 @@ def run_pipeline_gpu(recording_id, recording_path):
     local_video_path = None
     
     # Only handles the GPU/SSH/Docker workflow
-    print(f"[GPU-SSH] Launching GPU instance for: {recording_id}")
+    print(f"[GPU-SSH] Launching GPU instance for: {recording_id}", flush=True)
     
     # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
+    print(f"[GPU-SSH] Checking for S3 video to download...", flush=True)
     local_video_path = download_video_from_s3(recording_path)
+    if local_video_path:
+        print(f"[GPU-SSH] ✅ Video downloaded to EFS: {local_video_path}", flush=True)
+    else:
+        print(f"[GPU-SSH] ℹ️ No S3 video to download (video on EFS or no video_s3_key)", flush=True)
     
     update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
 
