@@ -45,8 +45,8 @@ def get_s3_key_from_status(recording_path: str) -> str | None:
     return None
 
 
-def update_status_with_s3_key(recording_path: str, s3_key: str) -> bool:
-    """Update status.json with S3 key."""
+def update_status_with_s3_key(recording_path: str, s3_key: str, video_path: str = None) -> bool:
+    """Update status.json with S3 key and camera folder path."""
     status_file = os.path.join(recording_path, "status.json")
     try:
         if os.path.exists(status_file):
@@ -56,6 +56,12 @@ def update_status_with_s3_key(recording_path: str, s3_key: str) -> bool:
             status_data = {}
         
         status_data['video_s3_key'] = s3_key
+        
+        # Add camera_folder if video_path is provided
+        if video_path:
+            camera_folder = os.path.dirname(video_path)
+            camera_folder_relative = os.path.relpath(camera_folder, recording_path)
+            status_data['camera_folder'] = camera_folder_relative
         
         with open(status_file, 'w') as f:
             json.dump(status_data, f, indent=2)
@@ -116,8 +122,8 @@ def migrate_recording(
         # Upload to S3
         s3_key = s3_service.upload_video(video_path, recording_id)
         
-        # Update status.json
-        if update_status_with_s3_key(recording_path, s3_key):
+        # Update status.json with S3 key and camera folder
+        if update_status_with_s3_key(recording_path, s3_key, video_path):
             result["status"] = "migrated"
             result["message"] = f"Uploaded to S3: {s3_key}"
             
