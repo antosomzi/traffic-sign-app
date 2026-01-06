@@ -45,9 +45,11 @@ def create_status_file(recording_path, status, message=""):
         "timestamp": datetime.datetime.now().isoformat()
     }
     
-    # Preserve video_s3_key if it exists
+    # Preserve video_s3_key and camera_folder if they exist
     if existing_data.get("video_s3_key"):
         status_data["video_s3_key"] = existing_data["video_s3_key"]
+    if existing_data.get("camera_folder"):
+        status_data["camera_folder"] = existing_data["camera_folder"]
     
     with open(status_file, "w") as f:
         json.dump(status_data, f, indent=2)

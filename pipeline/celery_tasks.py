@@ -47,9 +47,11 @@ def update_status(recording_path, status, message="", error_details=None):
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
     
-    # Preserve video_s3_key if it exists
+    # Preserve video_s3_key and camera_folder if they exist
     if existing_data.get("video_s3_key"):
         status_data["video_s3_key"] = existing_data["video_s3_key"]
+    if existing_data.get("camera_folder"):
+        status_data["camera_folder"] = existing_data["camera_folder"]
     
     # Add error_details if provided (for technical debugging)
     if error_details:
