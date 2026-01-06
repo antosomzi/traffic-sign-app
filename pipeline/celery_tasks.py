@@ -3,10 +3,17 @@
 import json
 import os
 import subprocess
+import sys
 import time
+
+# Ensure app directory is in Python path for imports
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
 
 from celery_app import celery
 from pipeline.gpu.runner import start_and_run_pipeline_ssh
+from services.s3_service import S3VideoService, get_camera_folder
 
 
 # Configuration - Auto-detect environment (EC2 vs local)
@@ -106,7 +113,6 @@ def download_video_from_s3(recording_path):
         if not camera_folder_relative:
             debug("No camera_folder in status.json, trying to find it...")
             # Fallback: try to find camera folder
-            from services.s3_service import get_camera_folder
             camera_folder = get_camera_folder(recording_path)
             if not camera_folder:
                 debug("Could not find camera folder, returning None")
@@ -119,8 +125,7 @@ def download_video_from_s3(recording_path):
         # Create camera folder if it doesn't exist
         os.makedirs(camera_folder, exist_ok=True)
         
-        # Import here to avoid circular imports
-        from services.s3_service import S3VideoService
+        # Use imported S3VideoService
         s3_service = S3VideoService()
         
         local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
