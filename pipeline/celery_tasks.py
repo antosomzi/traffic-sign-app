@@ -207,13 +207,27 @@ def run_pipeline_local(recording_id, recording_path):
 def run_pipeline_gpu(recording_id, recording_path):
     """Run pipeline on a dedicated GPU instance via SSH."""
     local_video_path = None
-    
+
+    # DEBUG: Write to file to confirm this function is called
+    with open("/home/ec2-user/debug_celery.log", "a") as f:
+        f.write(f"[{__import__('datetime').datetime.now()}] run_pipeline_gpu CALLED for {recording_id}\n")
+
     # Only handles the GPU/SSH/Docker workflow
     print(f"[GPU-SSH] Launching GPU instance for: {recording_id}", flush=True)
-    
+
     # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
     print(f"[GPU-SSH] Checking for S3 video to download...", flush=True)
+    
+    # DEBUG: Write to file before calling download
+    with open("/home/ec2-user/debug_celery.log", "a") as f:
+        f.write(f"[{__import__('datetime').datetime.now()}] About to call download_video_from_s3\n")
+    
     local_video_path = download_video_from_s3(recording_path)
+    
+    # DEBUG: Write result
+    with open("/home/ec2-user/debug_celery.log", "a") as f:
+        f.write(f"[{__import__('datetime').datetime.now()}] download_video_from_s3 returned: {local_video_path}\n")
+    
     if local_video_path:
         print(f"[GPU-SSH] ✅ Video downloaded to EFS: {local_video_path}", flush=True)
     else:
