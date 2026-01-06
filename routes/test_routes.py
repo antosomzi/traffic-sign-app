@@ -56,12 +56,26 @@ def simulate_error(recording_id):
         "timestamp": datetime.now().isoformat(),
     }
     
+    # Load existing data to preserve video_s3_key and camera_folder
+    existing_data = {}
+    try:
+        with open(status_file, "r") as f:
+            existing_data = json.load(f)
+    except Exception:
+        pass
+    
     status_data = {
         "status": "error",
         "message": "Pipeline failed (exit 1)",
         "timestamp": datetime.now().isoformat(),
         "error_details": error_details
     }
+    
+    # Preserve video_s3_key and camera_folder if they exist
+    if existing_data.get("video_s3_key"):
+        status_data["video_s3_key"] = existing_data["video_s3_key"]
+    if existing_data.get("camera_folder"):
+        status_data["camera_folder"] = existing_data["camera_folder"]
     
     try:
         with open(status_file, "w") as f:

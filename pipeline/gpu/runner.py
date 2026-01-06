@@ -117,16 +117,28 @@ def start_and_run_pipeline_ssh(recording_id):
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         status_file = f"{recording_path}/status.json"
         try:
+            # Load existing data to preserve video_s3_key and camera_folder
+            existing_data = {}
+            try:
+                with open(status_file, "r") as f:
+                    existing_data = json.load(f)
+            except Exception:
+                pass
+            
+            status_data = {
+                "status": "processing",
+                "message": "Pipeline running on GPU...",
+                "timestamp": datetime.now().isoformat(),
+            }
+            
+            # Preserve video_s3_key and camera_folder if they exist
+            if existing_data.get("video_s3_key"):
+                status_data["video_s3_key"] = existing_data["video_s3_key"]
+            if existing_data.get("camera_folder"):
+                status_data["camera_folder"] = existing_data["camera_folder"]
+            
             with open(status_file, "w") as f:
-                json.dump(
-                    {
-                        "status": "processing",
-                        "message": "Pipeline running on GPU...",
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                    f,
-                    indent=2,
-                )
+                json.dump(status_data, f, indent=2)
             print("✅ Status updated: Pipeline running on GPU")
         except Exception as e:  # pragma: no cover - remote filesystem side effect
             print(f"⚠️ Could not update status file: {e}")
