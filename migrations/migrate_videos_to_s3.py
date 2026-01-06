@@ -95,28 +95,64 @@ def migrate_recording(
         # Already on S3 - check if camera_folder is missing in status.json
         status_file = os.path.join(recording_path, "status.json")
         needs_camera_folder = False
+        status_data = None
         
         if os.path.exists(status_file):
             try:
                 with open(status_file, 'r') as f:
                     status_data = json.load(f)
-                if 'camera_folder' not in status_data and video_path:
+                if 'camera_folder' not in status_data:
                     needs_camera_folder = True
-            except Exception:
+                    print(f"  🔍 Missing camera_folder in {recording_id}, will add it")
+            except Exception as e:
+                print(f"  ⚠️  Error reading status.json: {e}")
                 pass
         
         # Update status.json with missing camera_folder
-        if needs_camera_folder:
-            if update_status_with_s3_key(recording_path, existing_s3_key, video_path):
-                result["status"] = "updated"
-                result["message"] = f"Added missing camera_folder to status.json"
+        if needs_camera_folder and status_data is not None:
+            # Try to find camera folder structure even if video is gone
+            camera_folder_path = None
+            
+            if video_path:
+                # Video still exists locally
+                camera_folder_path = os.path.dirname(video_path)
+                print(f"  📁 Found camera folder from video path: {camera_folder_path}")
+            else:
+                # Video gone, search for camera folder in structure
+                print(f"  🔍 Searching for camera folder in directory structure...")
+                for root, dirs, files in os.walk(recording_path):
+                    if os.path.basename(root) == "camera":
+                        camera_folder_path = root
+                        print(f"  ✅ Found camera folder: {camera_folder_path}")
+                        break
+            
+            if camera_folder_path:
+                camera_folder_relative = os.path.relpath(camera_folder_path, recording_path)
                 
-                # Delete local file if requested
-                if delete_local:
-                    size_bytes = os.path.getsize(video_path)
-                    result["size_mb"] = size_bytes / (1024 * 1024)
-                    os.remove(video_path)
-                    result["message"] += f" and deleted local file ({result['size_mb']:.1f} MB)"
+                # Update status.json directly
+                try:
+                    status_data['camera_folder'] = camera_folder_relative
+                    with open(status_file, 'w') as f:
+                        json.dump(status_data, f, indent=2)
+                    
+                    result["status"] = "updated"
+                    result["message"] = f"Added camera_folder: {camera_folder_relative}"
+                    
+                    # Delete local file if it exists and requested
+                    if video_path and delete_local:
+                        size_bytes = os.path.getsize(video_path)
+                        result["size_mb"] = size_bytes / (1024 * 1024)
+                        os.remove(video_path)
+                        result["message"] += f" (deleted local {result['size_mb']:.1f} MB)"
+                    
+                    return result
+                except Exception as e:
+                    result["status"] = "error"
+                    result["message"] = f"Failed to update status.json: {e}"
+                    return result
+            else:
+                result["status"] = "error"
+                result["message"] = "Could not find camera folder structure"
                 return result
         
         # Already on S3 with camera_folder - maybe delete local file?
