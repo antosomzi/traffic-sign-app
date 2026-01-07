@@ -121,13 +121,25 @@
         }
 
         .recording-id {
-            font-size: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .recording-id-formatted {
+            font-size: 20px;
             font-weight: 600;
             color: #333;
             display: flex;
             align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .recording-id-technical {
+            font-size: 12px;
+            font-weight: 400;
+            color: #666;
+            font-family: 'Courier New', monospace;
         }
 
         .recording-meta {
@@ -557,7 +569,18 @@
                 <div class="recording-header">
                     <div class="recording-header-left">
                         <div class="recording-id">
-                            <span>🎥 {{ rec.id }}</span>
+                            <div class="recording-id-formatted">
+                                <span>📅</span>
+                                <span id="formatted-name-{{ rec.id }}"></span>
+                            </div>
+                            <div class="recording-id-technical">
+                                🎥 {{ rec.id }}
+                            </div>
+                        </div>
+                        <script>
+                            document.getElementById('formatted-name-{{ rec.id }}').textContent = formatRecordingName('{{ rec.id }}');
+                        </script>
+                        <div class="recording-meta">
                             <span class="status-badge {{ rec.status }}">
                                 {% if rec.status == "completed" %}
                                     ✅ Completed
@@ -748,6 +771,52 @@
                 .replace(/'/g, '&#39;');
         }
 
+        /**
+         * Formats recording name from "yyyy_MM_dd_HH_mm_ss_fff" format to human-readable American format.
+         * Example: "2024_01_15_14_30_45_123" -> "Jan 15, 2024 2:30 PM"
+         * If parsing fails, returns the original name.
+         */
+        function formatRecordingName(recordingId) {
+            try {
+                // Extract parts: yyyy_MM_dd_HH_mm_ss_fff or yyyy_MM_dd_HH_mm_ss
+                const parts = recordingId.split('_');
+                if (parts.length < 6) {
+                    return recordingId;
+                }
+
+                const year = parseInt(parts[0]);
+                const month = parseInt(parts[1]) - 1; // JS months are 0-indexed
+                const day = parseInt(parts[2]);
+                const hour = parseInt(parts[3]);
+                const minute = parseInt(parts[4]);
+                const second = parseInt(parts[5]);
+
+                const date = new Date(year, month, day, hour, minute, second);
+
+                // Check if date is valid
+                if (isNaN(date.getTime())) {
+                    return recordingId;
+                }
+
+                // Format: "Jan 15, 2024 2:30 PM"
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                
+                const formattedMonth = monthNames[month];
+                const formattedDay = day;
+                const formattedYear = year;
+                
+                // Convert to 12-hour format
+                const hour12 = hour % 12 || 12;
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const formattedMinute = minute.toString().padStart(2, '0');
+
+                return `${formattedMonth} ${formattedDay}, ${formattedYear} ${hour12}:${formattedMinute} ${ampm}`;
+            } catch (e) {
+                return recordingId;
+            }
+        }
+
         function formatTimestamp(timestamp) {
             if (!timestamp) {
                 return '';
@@ -872,7 +941,15 @@
                 <div class="recording-header">
                     <div class="recording-header-left">
                         <div class="recording-id">
-                            <span>🎥 ${escapeHtml(rec.id)}</span>
+                            <div class="recording-id-formatted">
+                                <span>📅</span>
+                                <span>${escapeHtml(formatRecordingName(rec.id))}</span>
+                            </div>
+                            <div class="recording-id-technical">
+                                🎥 ${escapeHtml(rec.id)}
+                            </div>
+                        </div>
+                        <div class="recording-meta">
                             <span class="${badge.className}">
                                 ${badge.label}
                             </span>
