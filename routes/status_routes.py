@@ -3,11 +3,12 @@
 import os
 import json
 from datetime import datetime
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, request
 from flask_login import login_required, current_user
 from decorators.auth_decorators import auth_required
 from config import Config
 from services.organization_service import OrganizationService
+from models.user import User
 
 status_bp = Blueprint("status", __name__)
 
@@ -26,8 +27,16 @@ STEP_NAMES = [
 ]
 
 
-def _collect_recordings(organization_id):
-    """Collect recordings for a specific organization"""
+def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', sort_order='desc'):
+    """
+    Collect recordings for a specific organization with optional filtering and sorting.
+    
+    Args:
+        organization_id: Filter by organization
+        user_ids: Optional list of user IDs to filter by
+        sort_by: 'upload_date' or 'recording_date'
+        sort_order: 'asc' or 'desc'
+    """
     recordings_root = Config.EXTRACT_FOLDER
 
     all_records = []
@@ -35,10 +44,16 @@ def _collect_recordings(organization_id):
     if not os.path.isdir(recordings_root):
         return all_records
 
-    # Get recording IDs for this organization from database
-    org_recording_ids = OrganizationService.get_recordings_for_organization(organization_id)
+    # Get recordings from database with filtering and sorting
+    recordings = OrganizationService.get_recordings_for_organization(
+        organization_id,
+        user_ids=user_ids,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
 
-    for rec_id in org_recording_ids:
+    for rec in recordings:
+        rec_id = rec.id
         rec_folder = os.path.join(recordings_root, rec_id)
         if not os.path.isdir(rec_folder):
             continue
@@ -140,11 +155,14 @@ def _collect_recordings(organization_id):
             "timestamp": timestamp,
             "show_steps": show_steps,
             "steps": step_status if show_steps else None,
-            "error_details": error_details
+            "error_details": error_details,
+            "user_id": rec.user_id,
+            "uploader_name": rec.uploader_name,
+            "upload_date": rec.upload_date.isoformat() if rec.upload_date else None,
+            "recording_date": rec.recording_date.isoformat() if rec.recording_date else None
         })
 
-    # Sort by timestamp (most recent first)
-    all_records.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    # Sorting is already handled by database query, no need to sort here
 
     return all_records
 
@@ -153,12 +171,32 @@ def _collect_recordings(organization_id):
 @login_required
 def list_recordings():
     """Lists all recordings and their processing status for current user's organization."""
-    records = _collect_recordings(current_user.organization_id)
+    # Parse query params for filtering/sorting (support both user_id and user_ids)
+    user_ids = request.args.getlist('user_ids', type=int) or request.args.getlist('user_id', type=int) or None
+    sort_by = request.args.get('sort_by', 'upload_date')
+    sort_order = request.args.get('sort_order', 'desc')
+    
+    records = _collect_recordings(
+        current_user.organization_id,
+        user_ids=user_ids,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    
+    # Get users in organization for filter dropdown
+    org_users = User.get_by_organization(current_user.organization_id)
+    
     return render_template(
         "status.html",
         recordings=records,
         step_names=STEP_NAMES,
-        is_local_mode=IS_LOCAL_MODE
+        is_local_mode=IS_LOCAL_MODE,
+        org_users=org_users,
+        current_filters={
+            'user_ids': user_ids or [],
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
     )
 
 
@@ -166,5 +204,25 @@ def list_recordings():
 @login_required
 def status_data():
     """Returns the recording status data as JSON for AJAX polling."""
-    records = _collect_recordings(current_user.organization_id)
+    # Parse query params for filtering/sorting (support both user_id and user_ids)
+    user_ids = request.args.getlist('user_ids', type=int) or request.args.getlist('user_id', type=int) or None
+    sort_by = request.args.get('sort_by', 'upload_date')
+    sort_order = request.args.get('sort_order', 'desc')
+    
+    records = _collect_recordings(
+        current_user.organization_id,
+        user_ids=user_ids,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
     return jsonify({"recordings": records})
+
+
+@status_bp.route("/status/users", methods=["GET"])
+@login_required
+def get_organization_users():
+    """Returns users in current user's organization for filter dropdown."""
+    org_users = User.get_by_organization(current_user.organization_id)
+    return jsonify({
+        "users": [{"id": u.id, "name": u.name} for u in org_users]
+    })

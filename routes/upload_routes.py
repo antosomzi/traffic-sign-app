@@ -90,9 +90,10 @@ def upload_recording():
     # Update progress after reading (15%)
     RedisProgressService.update_extraction_progress(job_id, phase="writing", progress_percent=15)
 
-    # Capture organization_id BEFORE background thread (current_user won't exist in thread)
+    # Capture organization_id AND user_id BEFORE background thread (current_user won't exist in thread)
     user_organization_id = current_user.organization_id
-    print(f"👤 Upload by user in organization: {user_organization_id}")
+    user_id = current_user.id
+    print(f"👤 Upload by user {user_id} in organization: {user_organization_id}")
 
     def save_and_extract():
         """Saves file, extracts ZIP, then adds pipeline task to Celery queue"""
@@ -127,11 +128,11 @@ def upload_recording():
         )
         print(f"📦 Extraction completed. recording_id: {recording_id}")
         
-        # Register recording to organization
+        # Register recording to organization with user_id
         if recording_id:
             try:
-                OrganizationService.register_recording(recording_id, user_organization_id)
-                print(f"✅ Recording {recording_id} registered to org {user_organization_id}")
+                OrganizationService.register_recording(recording_id, user_organization_id, user_id=user_id)
+                print(f"✅ Recording {recording_id} registered to org {user_organization_id} by user {user_id}")
             except Exception as e:
                 print(f"⚠️ Failed to register recording to organization: {e}")
         

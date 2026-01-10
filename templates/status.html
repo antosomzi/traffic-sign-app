@@ -135,11 +135,11 @@
             gap: 8px;
         }
 
-        .recording-id-technical {
-            font-size: 12px;
+        .recording-upload-date {
+            font-size: 13px;
             font-weight: 500;
-            color: #666;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: #64748b;
+            margin-top: 4px;
         }
 
         .recording-meta {
@@ -523,6 +523,204 @@
         .modal-btn-confirm.danger:hover {
             background: #dc2626;
         }
+
+        /* Filter bar styles */
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            padding: 16px 20px;
+            background: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+
+        .filter-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #4b5563;
+            white-space: nowrap;
+        }
+
+        .filter-group select {
+            padding: 8px 32px 8px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            min-width: 160px;
+            background: white;
+            cursor: pointer;
+            color: #333;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        }
+
+        .filter-group select:hover {
+            border-color: #d1d5db;
+        }
+
+        /* Custom multi-select dropdown */
+        .multi-select-dropdown,
+        .custom-select-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-toggle {
+            padding: 8px 32px 8px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            min-width: 160px;
+            background: white;
+            cursor: pointer;
+            color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-toggle:hover {
+            border-color: #d1d5db;
+        }
+
+        .dropdown-toggle .dropdown-arrow {
+            font-size: 10px;
+            color: #6b7280;
+            transition: transform 0.2s ease;
+        }
+
+        .multi-select-dropdown.open .dropdown-arrow,
+        .custom-select-dropdown.open .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            min-width: 100%;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 9999;
+            display: none;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #333;
+            transition: background 0.15s ease;
+        }
+
+        .dropdown-item:hover {
+            background: #f3f4f6;
+        }
+
+        .dropdown-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #3b82f6;
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .dropdown-option {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+            transition: background 0.15s ease;
+        }
+
+        .dropdown-option:hover {
+            background: #f3f4f6;
+        }
+
+        .dropdown-option.selected {
+            background: #eff6ff;
+            color: #3b82f6;
+            font-weight: 500;
+        }
+
+        .sort-toggle-btn {
+            padding: 8px 14px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 500;
+            color: #4b5563;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .sort-toggle-btn:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        @media (max-width: 768px) {
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .filter-group {
+                flex-wrap: wrap;
+            }
+        }
+
+        .uploader-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .uploader-info .user-icon {
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -563,6 +761,50 @@
 
         <a href="/upload" class="nav-link">← Back to Upload</a>
 
+        <!-- Filter Bar -->
+        <div class="filter-bar" id="filterBar">
+            <div class="filter-group">
+                <label>👤 User:</label>
+                <div class="multi-select-dropdown" id="user-dropdown">
+                    <div class="dropdown-toggle" id="user-dropdown-toggle">
+                        <span class="selected-text">All Users</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="dropdown-menu" id="user-dropdown-menu">
+                        {% for user in org_users %}
+                        <label class="dropdown-item">
+                            <input type="checkbox" value="{{ user.id }}" 
+                                {% if current_filters.user_ids and user.id in current_filters.user_ids %}checked{% endif %}>
+                            <span>{{ user.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="filter-group">
+                <label>📅 Sort by:</label>
+                <div class="custom-select-dropdown" id="sort-dropdown">
+                    <div class="dropdown-toggle" id="sort-dropdown-toggle">
+                        <span class="selected-text">{% if current_filters.sort_by == 'recording_date' %}Recording Date{% else %}Upload Date{% endif %}</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="dropdown-menu" id="sort-dropdown-menu">
+                        <div class="dropdown-option {% if current_filters.sort_by == 'upload_date' %}selected{% endif %}" data-value="upload_date">Upload Date</div>
+                        <div class="dropdown-option {% if current_filters.sort_by == 'recording_date' %}selected{% endif %}" data-value="recording_date">Recording Date</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="filter-group">
+                <button class="sort-toggle-btn" id="sort-order-toggle" 
+                    data-order="{{ current_filters.sort_order }}"
+                    title="Toggle sort order">
+                    {% if current_filters.sort_order == 'desc' %}↓ Newest First{% else %}↑ Oldest First{% endif %}
+                </button>
+            </div>
+        </div>
+
         <div id="recordingsList">
             {% for rec in recordings %}
             <div class="recording-card" data-recording-id="{{ rec.id }}">
@@ -584,8 +826,14 @@
                                     {% endif %}
                                 </span>
                             </div>
-                            <div class="recording-id-technical">
-                                🎥 {{ rec.id }}
+                            {% if rec.upload_date %}
+                            <div class="recording-upload-date">
+                                📤 Uploaded: {{ rec.upload_date }}
+                            </div>
+                            {% endif %}
+                            <div class="uploader-info">
+                                <span class="user-icon">👤</span>
+                                <span>Uploaded by <strong>{{ rec.uploader_name or 'Unknown' }}</strong></span>
                             </div>
                         </div>
                     </div>
@@ -747,6 +995,158 @@
         const POLL_INTERVAL_MS = 10000;
         let pollTimeoutId = null;
         let isFetchingStatuses = false;
+
+        // Filter state
+        let filterState = {
+            userIds: {{ current_filters.user_ids | tojson | default('[]') }},
+            sortBy: '{{ current_filters.sort_by }}',
+            sortOrder: '{{ current_filters.sort_order }}'
+        };
+
+        // Custom dropdown elements
+        const userDropdown = document.getElementById('user-dropdown');
+        const userDropdownToggle = document.getElementById('user-dropdown-toggle');
+        const userDropdownMenu = document.getElementById('user-dropdown-menu');
+        const sortDropdown = document.getElementById('sort-dropdown');
+        const sortDropdownToggle = document.getElementById('sort-dropdown-toggle');
+        const sortDropdownMenu = document.getElementById('sort-dropdown-menu');
+        const sortOrderToggleEl = document.getElementById('sort-order-toggle');
+
+        // Dropdown toggle functions
+        function toggleDropdown(dropdown, menu) {
+            const isOpen = menu.classList.contains('show');
+            // Close all dropdowns first
+            closeAllDropdowns();
+            if (!isOpen) {
+                menu.classList.add('show');
+                dropdown.classList.add('open');
+            }
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                menu.classList.remove('show');
+            });
+            document.querySelectorAll('.multi-select-dropdown.open, .custom-select-dropdown.open').forEach(dd => {
+                dd.classList.remove('open');
+            });
+        }
+
+        // User dropdown toggle
+        if (userDropdownToggle) {
+            userDropdownToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDropdown(userDropdown, userDropdownMenu);
+            });
+        }
+
+        // Sort dropdown toggle
+        if (sortDropdownToggle) {
+            sortDropdownToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDropdown(sortDropdown, sortDropdownMenu);
+            });
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.multi-select-dropdown') && !e.target.closest('.custom-select-dropdown')) {
+                closeAllDropdowns();
+            }
+        });
+
+        // Update user dropdown display
+        function updateUserDropdownDisplay() {
+            const checkboxes = userDropdownMenu.querySelectorAll('input[type="checkbox"]');
+            const selectedNames = [];
+            filterState.userIds = [];
+            
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    filterState.userIds.push(parseInt(cb.value));
+                    selectedNames.push(cb.parentElement.querySelector('span').textContent);
+                }
+            });
+            
+            const displayText = userDropdownToggle.querySelector('.selected-text');
+            if (selectedNames.length === 0) {
+                displayText.textContent = 'All Users';
+            } else if (selectedNames.length === 1) {
+                displayText.textContent = selectedNames[0];
+            } else {
+                displayText.textContent = `${selectedNames.length} users selected`;
+            }
+        }
+
+        // User checkbox change handler (auto-apply)
+        if (userDropdownMenu) {
+            userDropdownMenu.addEventListener('change', (e) => {
+                if (e.target.type === 'checkbox') {
+                    updateUserDropdownDisplay();
+                    applyFilters();
+                }
+            });
+        }
+
+        // Sort option click handler (auto-apply)
+        if (sortDropdownMenu) {
+            sortDropdownMenu.querySelectorAll('.dropdown-option').forEach(option => {
+                option.addEventListener('click', (e) => {
+                    // Update selection
+                    sortDropdownMenu.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    // Update display text
+                    const displayText = sortDropdownToggle.querySelector('.selected-text');
+                    displayText.textContent = option.textContent;
+                    
+                    // Update state
+                    filterState.sortBy = option.dataset.value;
+                    
+                    // Close dropdown and apply
+                    closeAllDropdowns();
+                    applyFilters();
+                });
+            });
+        }
+
+        function buildQueryString() {
+            const params = new URLSearchParams();
+            // Multi-select user filter
+            filterState.userIds.forEach(id => {
+                params.append('user_ids', id);
+            });
+            params.set('sort_by', filterState.sortBy);
+            params.set('sort_order', filterState.sortOrder);
+            return params.toString();
+        }
+
+        function updateSortOrderButton() {
+            if (sortOrderToggleEl) {
+                sortOrderToggleEl.dataset.order = filterState.sortOrder;
+                sortOrderToggleEl.innerHTML = filterState.sortOrder === 'desc' ? '↓ Newest First' : '↑ Oldest First';
+            }
+        }
+
+        function applyFilters() {
+            // Update URL without page reload
+            const queryString = buildQueryString();
+            window.history.replaceState({}, '', `/status?${queryString}`);
+
+            // Fetch filtered data
+            fetchStatuses({ manual: true });
+        }
+
+        function toggleSortOrder() {
+            filterState.sortOrder = filterState.sortOrder === 'desc' ? 'asc' : 'desc';
+            updateSortOrderButton();
+            applyFilters();
+        }
+
+        // Attach sort order toggle listener
+        if (sortOrderToggleEl) {
+            sortOrderToggleEl.addEventListener('click', toggleSortOrder);
+        }
 
         function escapeHtml(value) {
             if (value === null || value === undefined) {
@@ -921,6 +1321,10 @@
                    </div>`
                 : '';
 
+            // Format uploader info
+            const uploaderName = rec.uploader_name || 'Unknown';
+            const uploadDate = rec.upload_date ? formatTimestamp(rec.upload_date) : '';
+
             return `
             <div class="recording-card" data-recording-id="${escapeHtml(rec.id)}">
                 <div class="recording-header">
@@ -933,8 +1337,10 @@
                                     ${badge.label}
                                 </span>
                             </div>
-                            <div class="recording-id-technical">
-                                🎥 ${escapeHtml(rec.id)}
+                            ${uploadDate ? `<div class="recording-upload-date">📤 Uploaded: ${escapeHtml(uploadDate)}</div>` : ''}
+                            <div class="uploader-info">
+                                <span class="user-icon">👤</span>
+                                <span>Uploaded by <strong>${escapeHtml(uploaderName)}</strong></span>
                             </div>
                         </div>
                     </div>
@@ -1036,7 +1442,9 @@
             }
 
             try {
-                const response = await fetch('/status/data', {
+                // Include filter parameters in the request
+                const queryString = buildQueryString();
+                const response = await fetch(`/status/data?${queryString}`, {
                     headers: { Accept: 'application/json' }
                 });
 
