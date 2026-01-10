@@ -6,14 +6,42 @@
 - **Flask (app.py)**: Web interface for upload/validation, runs on Gunicorn with 4 workers
 - **Celery (pipeline/celery_tasks.py)**: Asynchronous ML pipeline execution worker
 - **Redis**: Message broker for Celery + shared state storage across Gunicorn workers
+- **S3**: Video storage (`.mp4` files) - 13x cheaper than EFS ($0.023/GB vs $0.30/GB)
 
 **Critical Design Decision**: Multi-worker Gunicorn means each worker has separate memory. Redis stores extraction progress as JSON strings (key: `extraction:<job_id>`) so any worker can read another worker's upload status. Without this, status checks return 404 when handled by different workers.
 
+## Authentication Architecture
+
+**Dual authentication system** for web and mobile clients:
+
+**Web (Flask-Login + Sessions):**
+- Cookie-based sessions with HMAC signature using `SECRET_KEY`
+- `login_user()` → Signed session cookie → `current_user` object on every request
+- User loader callback: `@login_manager.user_loader` fetches user from DB via user_id
+- Decorators: `@login_required`, `@admin_required`, `@org_owner_required` (see `decorators/auth_decorators.py`)
+- Session verification: Cookie signature recalculated on every request, invalid if tampered
+
+**Mobile (Token-Based API):**
+- Bearer tokens stored in `auth_tokens` table (365-day validity)
+- Token generation: `secrets.token_urlsafe(32)` → cryptographically secure 32-byte string
+- Request flow: `Authorization: Bearer <token>` → DB lookup → Check expiration → Populate `g.current_user`
+- Mobile routes: `/api/login`, `/api/recordings` in `routes/mobile_auth_routes.py`
+- Decorator: `@mobile_auth_required` validates token and loads user into `g.current_user`
+
+**Key difference**: Web uses stateful sessions (server-side), mobile uses stateless tokens (client-side). Both verify on every request but use different mechanisms.
+
 ## Data Flow
 
-1. **Upload** → Flask validates ZIP structure → Extracts to temp → Validates folder hierarchy → Moves atomically to `recordings/<recording_id>/`
-2. **Processing** → Celery task queued → Runs 8-stage ML pipeline (`s0_detection` through `s7_export_csv`)
-3. **Results** → Downloads available at `/download/<recording_id>` (returns ZIP with `supports.csv` and `signs.csv`)
+1. **Upload** → Flask validates ZIP structure → Extracts to temp → Videos uploaded to S3 → Validates folder hierarchy → Moves atomically to `recordings/<recording_id>/`
+2. **Processing** → Celery task queued → Downloads video from S3 → Runs 8-stage ML pipeline (`s0_detection` through `s7_export_csv`) → Deletes local video
+3. **Results** → Downloads available at `/download/<recording_id>` (downloads video from S3, bundles with CSVs, returns ZIP with `supports.csv` and `signs.csv`)
+
+**S3 Video Storage** (`S3_STORAGE.md`):
+- Videos stored at `s3://traffic-sign-videos/videos/{prod|local}/<recording_id>/<video>.mp4`
+- Environment auto-detected: `/home/ec2-user` exists → `prod`, else → `local`
+- `status.json` contains `video_s3_key` for tracking S3 location
+- Migration: `python migrations/migrate_videos_to_s3.py` (supports `--dry-run` and `--delete-local`)
+- IAM permissions: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on bucket
 
 ## Dual Execution Modes
 
@@ -67,8 +95,40 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Path detection**: Auto-detects EC2 (`/home/ec2-user` exists) vs local (script directory) for `BASE_PATH`
 - **Redis auth**: Controlled by `.env` file's `REDIS_PASSWORD` (optional for local, required for production)
 - **Job IDs**: UUID4 for extraction progress tracking (separate from `recording_id`)
-- **Status tracking**: `status.json` in each recording folder (fields: `status`, `message`, `timestamp`)
-- **Atomic operations**: Extract to `temp_extracts/<job_id>/`, validate, then move to `recordings/` (prevents partial uploads)
+- **Status tracking**: `status.json` in each recording folder (fields: `status`, `message`, `timestamp`, `video_s3_key`)
+- **Atomic operations**: Extract to `temp_extracts/<job_id>/`, validate, upload video to S3, then move to `recordings/` (prevents partial uploads)
+
+## Job Queue & Status Tracking (`JOB_QUEUE_STATUS.md`)
+
+**Redis Progress Object** (key: `extraction:<job_id>`):
+```json
+{
+  "status": "preparing|running|done|error",
+  "phase": "reading|writing|extracting|running",
+  "progress_percent": 0-100,
+  "total_files": 100,
+  "extracted_files": 50,
+  "extract_size": 12345678,
+  "recording_id": "2024_05_20_23_32_53_415",
+  "error_msg": "...",
+  "error_details": {}
+}
+```
+
+**Status Progression**: `reading` → `preparing/writing` → `preparing/extracting` → `running` → `done/error`
+- Updates via `RedisProgressService.set_extraction_progress(job_id, progress_dict)`
+- Frontend polls `/extract_status/<job_id>` every 2s during upload
+- When extraction completes (`status=done`), Celery task queued for ML pipeline
+
+## Status Page Polling (`STATUS_POLLING.md`)
+
+**Server-Side Rendering + Client-Side Updates:**
+- Initial render: Jinja template with embedded JSON in `<script id="recordings-data">`
+- Routes: `GET /status` (HTML), `GET /status/data` (JSON) - both use `_collect_recordings()` helper
+- Polling: JS fetches `/status/data` every 10s when any recording is `processing`/`validated`
+- Data shape includes: `id`, `status`, `message`, `timestamp`, `show_steps`, `steps[]` with `{name, done}` for each pipeline stage
+- Stage detection: Inspects `result_pipeline_stable/s*/` folders for `output.json` presence
+- DOM updates: `renderRecordings()` regenerates HTML, `escapeHtml()` sanitizes dynamic content, `attachActionListeners()` rebinds click events
 
 ## Testing & Debugging
 
@@ -93,7 +153,11 @@ python app.py  # Dev mode (single worker, auto-reload)
 
 ## Reference Files
 
-- Architecture details: `README.md`, `DEPLOYMENT.md`
-- GPU configuration: `EC2_GPU_CONFIG.md`, `pipeline/gpu/config.py`
-- Routes: `app.py` lines 378-645 (upload, status, download endpoints)
-- Validation logic: `app.py` lines 87-195 (strict hierarchy enforcement)
+- **Authentication**: `AUTHENTICATION.md` (web sessions), `AUTHENTICATION_MOBILE.md` (mobile tokens)
+- **Storage**: `S3_STORAGE.md` (video S3 integration)
+- **Status Systems**: `JOB_QUEUE_STATUS.md` (Redis job tracking), `STATUS_POLLING.md` (frontend polling)
+- **Deployment**: `README.md`, `DEPLOYMENT.md`
+- **GPU configuration**: `pipeline/gpu/config.py`
+- **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner)
+- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization)
+- **Decorators**: `decorators/auth_decorators.py` for access control
