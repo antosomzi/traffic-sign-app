@@ -1213,9 +1213,12 @@
             }
 
             try {
-                // Parse ISO 8601 timestamp and convert to user's local timezone
-                const date = new Date(timestamp);
-                // Format for US locale: MM/DD/YYYY, HH:MM:SS AM/PM
+                // Parse ISO 8601 timestamp
+                // Since we know the server sends UTC time, we'll treat it as such
+                // and convert to the client's local time zone
+                const date = new Date(timestamp + 'Z'); // Append 'Z' to force interpretation as UTC
+
+                // Format for US locale in the client's local timezone: MM/DD/YYYY, HH:MM:SS AM/PM
                 return date.toLocaleString('en-US', {
                     year: 'numeric',
                     month: '2-digit',
