@@ -328,6 +328,7 @@ class GeoService:
         from_date: Optional[str] = None,
         to_date: Optional[str] = None,
         recording_ids: Optional[List[str]] = None,
+        user_ids: Optional[List[str]] = None,
         simplify: Optional[float] = None,
         use_cache: bool = True
     ) -> Dict:
@@ -348,7 +349,7 @@ class GeoService:
         # Generate cache key. Use the backend-fixed simplification value so cache
         # entries are consistent regardless of any frontend input.
         fixed_simplify = GeoService.FIXED_SIMPLIFY
-        params_str = f"{org_id}_{from_date}_{to_date}_{recording_ids}_{fixed_simplify}"
+        params_str = f"{org_id}_{from_date}_{to_date}_{recording_ids}_{user_ids}_{fixed_simplify}"
         cache_key = f"org_routes:{hashlib.md5(params_str.encode()).hexdigest()}"
 
         # Check cache
@@ -361,7 +362,7 @@ class GeoService:
                     pass
         
         # Get recordings for organization
-        recordings = Recording.get_by_organization(org_id)
+        recordings = Recording.get_by_organization(org_id, user_ids=user_ids)
         
         # Apply filters
         if from_date:
@@ -414,7 +415,8 @@ class GeoService:
     @staticmethod
     def refresh_organization_routes_cache(org_id: int, from_date: Optional[str] = None,
                                        to_date: Optional[str] = None,
-                                       recording_ids: Optional[List[str]] = None) -> bool:
+                                       recording_ids: Optional[List[str]] = None,
+                                       user_ids: Optional[List[str]] = None) -> bool:
         """
         Refresh the cache for organization routes by deleting the cached entry
 
@@ -429,7 +431,7 @@ class GeoService:
         """
         # Generate cache key using the same logic as in organization_routes_to_geojson
         fixed_simplify = GeoService.FIXED_SIMPLIFY
-        params_str = f"{org_id}_{from_date}_{to_date}_{recording_ids}_{fixed_simplify}"
+        params_str = f"{org_id}_{from_date}_{to_date}_{recording_ids}_{user_ids}_{fixed_simplify}"
         cache_key = f"org_routes:{hashlib.md5(params_str.encode()).hexdigest()}"
 
         try:

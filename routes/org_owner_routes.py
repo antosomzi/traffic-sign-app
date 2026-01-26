@@ -212,6 +212,7 @@ def get_routes_geojson():
         - from: Start date (ISO format YYYY-MM-DD)
         - to: End date (ISO format YYYY-MM-DD)
         - recordings: Comma-separated recording IDs
+        - user_id: Filter by specific user ID
         - simplify: Simplification tolerance (float, optional)
 
     Returns:
@@ -221,11 +222,17 @@ def get_routes_geojson():
     from_date = request.args.get('from')
     to_date = request.args.get('to')
     recordings_param = request.args.get('recordings')
+    user_id = request.args.get('user_id')
 
     # Parse recordings list
     recording_ids = None
     if recordings_param:
         recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
+
+    # Parse user ID
+    user_ids = None
+    if user_id:
+        user_ids = [user_id]
 
     # Simplification is fixed server-side; frontend should not supply a value.
     simplify = None
@@ -237,6 +244,7 @@ def get_routes_geojson():
             from_date=from_date,
             to_date=to_date,
             recording_ids=recording_ids,
+            user_ids=user_ids,
             use_cache=True  # Cache is now always enabled by default
         )
 
@@ -256,24 +264,37 @@ def refresh_routes_cache():
     """
     API endpoint to refresh the GPS routes cache for the organization
     Invalidates the current cache so the next request will regenerate it
+
+    Query parameters:
+        - from: Start date (ISO format YYYY-MM-DD)
+        - to: End date (ISO format YYYY-MM-DD)
+        - recordings: Comma-separated recording IDs
+        - user_id: Filter by specific user ID
     """
     try:
         # Parse query parameters to match the same filters used in get_routes_geojson
         from_date = request.args.get('from')
         to_date = request.args.get('to')
         recordings_param = request.args.get('recordings')
+        user_id = request.args.get('user_id')
 
         # Parse recordings list
         recording_ids = None
         if recordings_param:
             recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
 
+        # Parse user ID
+        user_ids = None
+        if user_id:
+            user_ids = [user_id]
+
         # Call the service method to refresh cache with the same parameters
         result = GeoService.refresh_organization_routes_cache(
             org_id=current_user.organization_id,
             from_date=from_date,
             to_date=to_date,
-            recording_ids=recording_ids
+            recording_ids=recording_ids,
+            user_ids=user_ids
         )
 
         return jsonify({

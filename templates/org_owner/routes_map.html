@@ -171,10 +171,10 @@
 
         .section-map {
             background: white;
-            padding: 25px;
+            padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin: 20px 0;
+            margin: 15px 0;
         }
 
         .section {
@@ -330,7 +330,7 @@
         }
 
         .map-container {
-            height: 75vh;
+            height: 80vh;
             width: 100%;
             margin-top: 20px;
             border-radius: 8px;
@@ -359,12 +359,7 @@
         </div>
     </div>
 
-    <div class="container-full">
-        <div class="header">
-            <h2>GPS Routes Map - {{ organization.name }}</h2>
-            <p class="text-muted">View all recorded GPS traces for your organization</p>
-        </div>
-
+    <div class="container-fluid p-0">
         <div class="section-map">
             <div class="filter-card">
                 <h5>Filters</h5>
@@ -378,6 +373,12 @@
                             <label for="toDate" class="form-label">To Date</label>
                             <input type="date" class="form-control" id="toDate" name="to">
                         </div>
+                        <div class="filter-group">
+                            <label for="userId" class="form-label">User</label>
+                            <select class="form-control" id="userId" name="user_id">
+                                <option value="">All Users</option>
+                            </select>
+                        </div>
                         <!-- Simplification controlled on backend; removed from frontend -->
                         <div class="filter-group">
                             <label class="form-label d-block">&nbsp;</label>
@@ -387,7 +388,7 @@
                         </div>
                         <div class="filter-group">
                             <label class="form-label d-block">&nbsp;</label>
-                            <button type="submit" class="btn btn-primary w-100">Load Routes</button>
+                            <button type="submit" class="btn btn-primary w-100">Apply Filter</button>
                         </div>
                     </div>
                 </form>
@@ -397,7 +398,6 @@
 
             <div class="map-controls">
                 <button class="btn btn-sm btn-secondary" id="fitBoundsBtn">Fit to Routes</button>
-                <button class="btn btn-sm btn-outline-secondary" id="clearBtn">Clear Map</button>
             </div>
         </div>
     </div>
@@ -419,6 +419,33 @@
             center: [40.7128, -74.0060], // Default: NYC
             zoom: 10,
             maxZoom: 19
+        });
+
+        // Load users for the dropdown
+        function loadUsers() {
+            fetch(`{{ url_for('status.get_organization_users') }}`)
+                .then(response => response.json())
+                .then(data => {
+                    const users = data.users; // Extract users from the response object
+                    const userSelect = document.getElementById('userId');
+                    userSelect.innerHTML = '<option value="">All Users</option>';
+
+                    users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = user.name;
+                        userSelect.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading users:', error);
+                });
+        }
+
+        // Load users when the page loads
+        window.addEventListener('load', function() {
+            loadUsers();
+            loadRoutes(); // Also load routes on page load
         });
 
         // Add OpenStreetMap tile layer
@@ -510,6 +537,12 @@
                 if (value) {
                     params.append(key, value);
                 }
+            }
+
+            // Specifically handle user_id to ensure empty value is not added to params
+            const userId = document.getElementById('userId').value;
+            if (userId) {
+                params.append('user_id', userId);
             }
 
             // Cache is now handled server-side by default, no need to send cache parameter
@@ -660,6 +693,12 @@
                 if (value) {
                     params.append(key, value);
                 }
+            }
+
+            // Specifically handle user_id to ensure empty value is not added to params
+            const userId = document.getElementById('userId').value;
+            if (userId) {
+                params.append('user_id', userId);
             }
 
             // Call the refresh cache endpoint with the same parameters
