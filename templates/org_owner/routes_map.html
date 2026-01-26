@@ -415,7 +415,11 @@
 
     <script>
         // Initialize map
-        const map = L.map('map').setView([40.7128, -74.0060], 10); // Default: NYC
+        const map = L.map('map', {
+            center: [40.7128, -74.0060], // Default: NYC
+            zoom: 10,
+            maxZoom: 19
+        });
 
         // Add OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -429,7 +433,7 @@
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
             maxClusterRadius: 80,
-            disableClusteringAtZoom: 14,  // Disable clustering at zoom level 14 and above
+            disableClusteringAtZoom: 10,  // Disable clustering at zoom level 10 and above (so clusters appear at zoom 9 and below, which is 10 levels from max zoom of 19)
             iconCreateFunction: function(cluster) {
                 // Custom function to create cluster icons with consistent styling
                 const childCount = cluster.getChildCount();
@@ -450,6 +454,9 @@
                 });
             }
         });
+
+        // Layer group to hold route polylines
+        const routesLayerGroup = L.layerGroup();
 
         // Store current routes layer
         let routesLayer = null;
@@ -537,12 +544,15 @@
             // Clear any existing clusters
             markers.clearLayers();
 
+            // Clear route polylines
+            routesLayerGroup.clearLayers();
+
             if (!geojson.features || geojson.features.length === 0) {
                 alert('No routes found for the selected filters.');
                 return;
             }
 
-            // Create markers for each route using the center point
+            // Create markers for each route using the center point and add route polylines
             geojson.features.forEach((feature, index) => {
                 const coordinates = feature.geometry.coordinates;
 
@@ -568,42 +578,37 @@
 
                 marker.bindPopup(popupContent);
 
-                // Add click event to show the full route
-                marker.on('click', function(e) {
-                    // Remove previous routes layer
-                    if (routesLayer) {
-                        map.removeLayer(routesLayer);
-                    }
-
-                    // Display the full route
-                    const singleRoute = {
-                        type: 'FeatureCollection',
-                        features: [feature]
-                    };
-
-                    routesLayer = L.geoJSON(singleRoute, {
-                        style: function(feat) {
-                            return {
-                                color: getColorForRoute(index),
-                                weight: 4,
-                                opacity: 0.9
-                            };
-                        },
-                        onEachFeature: function(feat, lyr) {
-                            lyr.bindPopup(popupContent);
-                        }
-                    }).addTo(map);
-
-                    // Fit view to the route
-                    map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
-                });
-
                 // Add marker to cluster
                 markers.addLayer(marker);
+
+                // Create and add the route polyline to the layer group
+                const routePolyline = L.geoJSON({
+                    type: 'Feature',
+                    geometry: feature.geometry,
+                    properties: feature.properties
+                }, {
+                    style: function(feat) {
+                        return {
+                            color: getColorForRoute(index),
+                            weight: 3,
+                            opacity: 0.7
+                        };
+                    },
+                    onEachFeature: function(feat, lyr) {
+                        lyr.bindPopup(popupContent);
+                    }
+                });
+
+                routePolyline.eachLayer(function(layer) {
+                    routesLayerGroup.addLayer(layer);
+                });
             });
 
             // Add clusters to map
             map.addLayer(markers);
+
+            // Add route polylines to map
+            map.addLayer(routesLayerGroup);
 
             // Fit map to bounds
             if (markers.getBounds().isValid()) {
@@ -678,8 +683,8 @@
         });
 
         document.getElementById('fitBoundsBtn').addEventListener('click', function() {
-            if (routesLayer) {
-                map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
+            if (routesLayerGroup && routesLayerGroup.getBounds && routesLayerGroup.getBounds().isValid()) {
+                map.fitBounds(routesLayerGroup.getBounds(), { padding: [50, 50] });
             } else if (markers.getBounds().isValid()) {
                 map.fitBounds(markers.getBounds(), { padding: [50, 50] });
             }
@@ -691,6 +696,7 @@
                 routesLayer = null;
             }
             markers.clearLayers();
+            routesLayerGroup.clearLayers();
         });
         
         // Auto-load routes on page load
