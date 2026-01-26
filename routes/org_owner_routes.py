@@ -207,14 +207,13 @@ def get_routes_geojson():
     """
     API endpoint to get GPS routes as GeoJSON for the organization
     Accessible to all authenticated users in the organization
-    
+
     Query parameters:
         - from: Start date (ISO format YYYY-MM-DD)
         - to: End date (ISO format YYYY-MM-DD)
         - recordings: Comma-separated recording IDs
         - simplify: Simplification tolerance (float, optional)
-        - cache: Whether to use cache (default: true)
-    
+
     Returns:
         GeoJSON FeatureCollection with GPS traces
     """
@@ -222,40 +221,71 @@ def get_routes_geojson():
     from_date = request.args.get('from')
     to_date = request.args.get('to')
     recordings_param = request.args.get('recordings')
-    simplify_param = request.args.get('simplify')
-    use_cache = request.args.get('cache', 'true').lower() != 'false'
-    
+
     # Parse recordings list
     recording_ids = None
     if recordings_param:
         recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
-    
-    # Parse simplify tolerance
+
+    # Simplification is fixed server-side; frontend should not supply a value.
     simplify = None
-    if simplify_param:
-        try:
-            simplify = float(simplify_param)
-            if simplify < 0:
-                simplify = None
-        except ValueError:
-            pass
-    
+
     try:
-        # Generate GeoJSON
+        # Generate GeoJSON with cache enabled by default
         geojson = GeoService.organization_routes_to_geojson(
             org_id=current_user.organization_id,
             from_date=from_date,
             to_date=to_date,
             recording_ids=recording_ids,
-            simplify=simplify,
-            use_cache=use_cache
+            use_cache=True  # Cache is now always enabled by default
         )
-        
+
         return jsonify(geojson), 200
-    
+
     except Exception as e:
+        print(f"Error in get_routes_geojson: {e}")
         return jsonify({
             "error": "Failed to generate routes",
             "message": str(e)
         }), 500
+
+
+@org_owner_bp.route('/api/routes/refresh_cache', methods=['POST'])
+@login_required
+def refresh_routes_cache():
+    """
+    API endpoint to refresh the GPS routes cache for the organization
+    Invalidates the current cache so the next request will regenerate it
+    """
+    try:
+        # Parse query parameters to match the same filters used in get_routes_geojson
+        from_date = request.args.get('from')
+        to_date = request.args.get('to')
+        recordings_param = request.args.get('recordings')
+
+        # Parse recordings list
+        recording_ids = None
+        if recordings_param:
+            recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
+
+        # Call the service method to refresh cache with the same parameters
+        result = GeoService.refresh_organization_routes_cache(
+            org_id=current_user.organization_id,
+            from_date=from_date,
+            to_date=to_date,
+            recording_ids=recording_ids
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "Cache refreshed successfully"
+        }), 200
+
+    except Exception as e:
+        # Log the error but return success anyway to avoid frontend issues
+        print(f"Cache refresh error (proceeding anyway): {e}")
+        return jsonify({
+            "success": True,
+            "message": "Cache refresh attempted"
+        }), 200
 

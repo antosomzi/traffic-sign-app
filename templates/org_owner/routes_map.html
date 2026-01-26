@@ -9,11 +9,35 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
-    
+
+    <!-- Marker Cluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
     <style>
+        .route-cluster-small {
+            background-color: rgba(181, 226, 140, 0.6);
+        }
+        .route-cluster-small div {
+            background-color: rgba(110, 204, 57, 0.6);
+        }
+
+        .route-cluster-medium {
+            background-color: rgba(241, 211, 87, 0.6);
+        }
+        .route-cluster-medium div {
+            background-color: rgba(240, 194, 12, 0.6);
+        }
+
+        .route-cluster-large {
+            background-color: rgba(253, 156, 115, 0.6);
+        }
+        .route-cluster-large div {
+            background-color: rgba(241, 128, 23, 0.6);
+        }
         #map {
             height: 70vh;
             width: 100%;
@@ -269,19 +293,44 @@
             min-width: 160px;
         }
 
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+        .rerun-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 9999px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .stat-item {
+        .rerun-btn:hover:not(:disabled) {
+            background: #2563eb;
+            transform: scale(1.05);
+        }
+
+        .rerun-btn:disabled {
+            background: #dbeafe;
+            color: #94a3b8;
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .map-controls {
             display: flex;
-            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+            justify-content: flex-end;
         }
 
         .map-container {
-            height: 70vh;
+            height: 75vh;
             width: 100%;
             margin-top: 20px;
             border-radius: 8px;
@@ -329,23 +378,12 @@
                             <label for="toDate" class="form-label">To Date</label>
                             <input type="date" class="form-control" id="toDate" name="to">
                         </div>
-                        <div class="filter-group">
-                            <label for="simplify" class="form-label">Simplification</label>
-                            <select class="form-select" id="simplify" name="simplify">
-                                <option value="">None</option>
-                                <option value="0.0001">Low</option>
-                                <option value="0.0005" selected>Medium</option>
-                                <option value="0.001">High</option>
-                            </select>
-                        </div>
+                        <!-- Simplification controlled on backend; removed from frontend -->
                         <div class="filter-group">
                             <label class="form-label d-block">&nbsp;</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="useCache" name="cache" checked>
-                                <label class="form-check-label" for="useCache">
-                                    Use cache
-                                </label>
-                            </div>
+                            <button type="button" class="rerun-btn" id="refreshCacheBtn" title="Refresh cache">
+                                ↻
+                            </button>
                         </div>
                         <div class="filter-group">
                             <label class="form-label d-block">&nbsp;</label>
@@ -357,47 +395,47 @@
 
             <div id="map" class="map-container"></div>
 
-            <div class="route-info">
-                <div class="stats-row">
-                    <div class="stat-item">
-                        <strong>Total Routes:</strong> <span id="totalRoutes">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>Total Points:</strong> <span id="totalPoints">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <strong>Loaded At:</strong> <span id="loadedAt">-</span>
-                    </div>
-                    <div class="stat-item">
-                        <button class="btn btn-sm btn-secondary" id="fitBoundsBtn">Fit to Routes</button>
-                        <button class="btn btn-sm btn-outline-secondary" id="clearBtn">Clear Map</button>
-                    </div>
-                </div>
+            <div class="map-controls">
+                <button class="btn btn-sm btn-secondary" id="fitBoundsBtn">Fit to Routes</button>
+                <button class="btn btn-sm btn-outline-secondary" id="clearBtn">Clear Map</button>
             </div>
         </div>
     </div>
 
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
-            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin=""></script>
-    
+
+    <!-- Marker Cluster JS -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
         // Initialize map
         const map = L.map('map').setView([40.7128, -74.0060], 10); // Default: NYC
-        
+
         // Add OpenStreetMap tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
-        
+
+        // Create marker cluster group
+        const markers = L.markerClusterGroup({
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 80,
+            disableClusteringAtZoom: 14  // Disable clustering at zoom level 14 and above
+        });
+
         // Store current routes layer
         let routesLayer = null;
-        
+        let currentRoutes = null;
+
         // Color palette for routes
         const colors = [
             '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00',
@@ -434,21 +472,22 @@
         
         function loadRoutes() {
             showLoading();
-            
+
             // Build query string from form
             const formData = new FormData(document.getElementById('filterForm'));
             const params = new URLSearchParams();
-            
+
+            // Append regular form fields
             for (const [key, value] of formData.entries()) {
+                // skip cache here; we'll explicitly set it below so unchecked sends 'false'
+                if (key === 'cache') continue;
                 if (value) {
-                    if (key === 'cache') {
-                        params.append('cache', 'true');
-                    } else {
-                        params.append(key, value);
-                    }
+                    params.append(key, value);
                 }
             }
-            
+
+            // Cache is now handled server-side by default, no need to send cache parameter
+
             // Fetch GeoJSON from API
             fetch(`{{ url_for('org_owner.get_routes_geojson') }}?${params.toString()}`)
                 .then(response => {
@@ -458,6 +497,7 @@
                     return response.json();
                 })
                 .then(data => {
+                    currentRoutes = data;
                     displayRoutes(data);
                     updateStats(data);
                     hideLoading();
@@ -474,13 +514,29 @@
             if (routesLayer) {
                 map.removeLayer(routesLayer);
             }
-            
+
             if (!geojson.features || geojson.features.length === 0) {
                 alert('No routes found for the selected filters.');
                 return;
             }
-            
-            // Create new layer
+
+            // Check current zoom level to decide display mode
+            const currentZoom = map.getZoom();
+
+            if (currentZoom >= 14) {
+                // High zoom - display individual routes
+                displayIndividualRoutes(geojson);
+            } else {
+                // Low zoom - display clusters
+                displayRouteClusters(geojson);
+            }
+        }
+
+        function displayIndividualRoutes(geojson) {
+            // Clear any existing clusters
+            markers.clearLayers();
+
+            // Display routes as before
             routesLayer = L.geoJSON(geojson, {
                 style: function(feature) {
                     const index = geojson.features.indexOf(feature);
@@ -495,10 +551,8 @@
                         const props = feature.properties;
                         const popupContent = `
                             <div style="min-width: 200px;">
-                                <h6><strong>Recording ID:</strong></h6>
-                                <p style="font-size: 0.9em; word-break: break-all;">${escapeHtml(props.recording_id || 'N/A')}</p>
-                                <p><strong>Device:</strong> ${escapeHtml(props.device_id || 'N/A')}</p>
-                                <p><strong>Points:</strong> ${props.num_points || 0}</p>
+                                <h6><strong>Route Info</strong></h6>
+                                <p><strong>User:</strong> ${escapeHtml(props.user_name || 'N/A')}</p>
                                 ${props.start_time ? `<p><strong>Start:</strong> ${new Date(props.start_time).toLocaleString()}</p>` : ''}
                                 ${props.end_time ? `<p><strong>End:</strong> ${new Date(props.end_time).toLocaleString()}</p>` : ''}
                                 ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
@@ -508,21 +562,115 @@
                     }
                 }
             }).addTo(map);
-            
+
             // Fit map to routes
             map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
         }
+
+        function displayRouteClusters(geojson) {
+            // Clear any existing routes layer
+            if (routesLayer) {
+                map.removeLayer(routesLayer);
+            }
+
+            // Clear existing clusters
+            markers.clearLayers();
+
+            if (!geojson.features || geojson.features.length === 0) {
+                return;
+            }
+
+            // Create markers for each route using the center point
+            geojson.features.forEach((feature, index) => {
+                const coordinates = feature.geometry.coordinates;
+
+                // Calculate approximate center point of the route
+                const center = calculateRouteCenter(coordinates);
+
+                // Create marker at center point
+                const marker = L.marker([center.lat, center.lng], {
+                    title: `Route: ${feature.properties.recording_id}`
+                });
+
+                // Create popup content
+                const props = feature.properties;
+                const popupContent = `
+                    <div style="min-width: 200px;">
+                        <h6><strong>Route Info</strong></h6>
+                        <p><strong>User:</strong> ${escapeHtml(props.user_name || 'N/A')}</p>
+                        ${props.start_time ? `<p><strong>Start:</strong> ${new Date(props.start_time).toLocaleString()}</p>` : ''}
+                        ${props.end_time ? `<p><strong>End:</strong> ${new Date(props.end_time).toLocaleString()}</p>` : ''}
+                        ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
+                        <p><em>Click to view full route</em></p>
+                    </div>
+                `;
+
+                marker.bindPopup(popupContent);
+
+                // Add click event to show the full route
+                marker.on('click', function(e) {
+                    // Remove previous routes layer
+                    if (routesLayer) {
+                        map.removeLayer(routesLayer);
+                    }
+
+                    // Display the full route
+                    const singleRoute = {
+                        type: 'FeatureCollection',
+                        features: [feature]
+                    };
+
+                    routesLayer = L.geoJSON(singleRoute, {
+                        style: function(feat) {
+                            return {
+                                color: getColorForRoute(index),
+                                weight: 4,
+                                opacity: 0.9
+                            };
+                        },
+                        onEachFeature: function(feat, lyr) {
+                            lyr.bindPopup(popupContent);
+                        }
+                    }).addTo(map);
+
+                    // Fit view to the route
+                    map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
+                });
+
+                // Add marker to cluster
+                markers.addLayer(marker);
+            });
+
+            // Add clusters to map
+            map.addLayer(markers);
+        }
+
+        // Function to calculate approximate center point of a route
+        function calculateRouteCenter(coordinates) {
+            if (!coordinates || coordinates.length === 0) {
+                return { lat: 0, lng: 0 };
+            }
+
+            let avgLat = 0;
+            let avgLng = 0;
+
+            // Calculate average of coordinates
+            for (let i = 0; i < coordinates.length; i++) {
+                avgLat += coordinates[i][1]; // latitude
+                avgLng += coordinates[i][0]; // longitude
+            }
+
+            avgLat /= coordinates.length;
+            avgLng /= coordinates.length;
+
+            return {
+                lat: avgLat,
+                lng: avgLng
+            };
+        }
         
         function updateStats(geojson) {
-            const count = geojson.features ? geojson.features.length : 0;
-            const totalPoints = geojson.features ? 
-                geojson.features.reduce((sum, f) => sum + (f.properties.num_points || 0), 0) : 0;
-            const loadedAt = geojson.properties?.generated_at ? 
-                new Date(geojson.properties.generated_at).toLocaleString() : 'N/A';
-            
-            document.getElementById('totalRoutes').textContent = count;
-            document.getElementById('totalPoints').textContent = totalPoints.toLocaleString();
-            document.getElementById('loadedAt').textContent = loadedAt;
+            // Stats display removed - function kept for compatibility if needed later
         }
         
         // Event listeners
@@ -530,21 +678,53 @@
             e.preventDefault();
             loadRoutes();
         });
-        
+
+        document.getElementById('refreshCacheBtn').addEventListener('click', function() {
+            // Build query string from form to match the same filters
+            const formData = new FormData(document.getElementById('filterForm'));
+            const params = new URLSearchParams();
+
+            // Append regular form fields
+            for (const [key, value] of formData.entries()) {
+                if (value) {
+                    params.append(key, value);
+                }
+            }
+
+            // Call the refresh cache endpoint with the same parameters
+            fetch(`{{ url_for('org_owner.refresh_routes_cache') }}?${params.toString()}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Regardless of success or failure, reload routes to get fresh data
+                loadRoutes();
+            })
+            .catch(error => {
+                // Error occurred but no popup shown to user
+                console.error('Error refreshing cache:', error);
+                // Still attempt to reload routes to get latest data
+                loadRoutes();
+            });
+        });
+
         document.getElementById('fitBoundsBtn').addEventListener('click', function() {
             if (routesLayer) {
                 map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
+            } else if (markers.getBounds().isValid()) {
+                map.fitBounds(markers.getBounds(), { padding: [50, 50] });
             }
         });
-        
+
         document.getElementById('clearBtn').addEventListener('click', function() {
             if (routesLayer) {
                 map.removeLayer(routesLayer);
                 routesLayer = null;
             }
-            document.getElementById('totalRoutes').textContent = '-';
-            document.getElementById('totalPoints').textContent = '-';
-            document.getElementById('loadedAt').textContent = '-';
+            markers.clearLayers();
         });
         
         // Auto-load routes on page load
