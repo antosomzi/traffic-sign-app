@@ -8,6 +8,7 @@ Web application for uploading, validating, and asynchronously processing traffic
 ## 📑 Table of Contents
 
 - [Architecture](#-architecture)
+- [Features](#-features)
 - [Data Flow](#-flow)
 - [Project Structure](#-project-structure)
 - [File Storage Structure](#-file-storage-structure)
@@ -80,6 +81,26 @@ For detailed deployment, Nginx configuration, and SSL setup, see **[DEPLOYMENT.m
 - **Gunicorn workers (4)**: Handle multiple HTTP requests simultaneously
 - **Celery worker (1)**: Process one ML pipeline at a time
 - Users can upload simultaneously, pipelines are queued
+
+## ✨ Features
+
+### Core Features
+- **Asynchronous Processing**: Upload and process recordings without blocking
+- **Multi-tenant Support**: Organization-based access control and data isolation
+- **Role-based Access**: Admin, Organization Owner, and User roles with appropriate permissions
+- **Video Storage in S3**: Cost-efficient video storage (13x cheaper than EFS)
+- **Redis Caching**: Fast status checks and data retrieval with 1-hour TTL
+
+### GPS Routes Visualization 🗺️
+- **Interactive Map**: View all organization GPS traces on an interactive Leaflet map
+- **Filtering**: Filter routes by date range, recording ID
+- **Simplification**: Reduce coordinate density for faster rendering (RDP algorithm)
+- **Statistics**: View total routes, GPS points, and route metadata
+- **Auto-caching**: Redis-cached GeoJSON for instant loading
+
+**Access**: `/org_owner/routes_map` (accessible to all authenticated users in an organization)
+
+For detailed documentation on the GPS Routes feature, see **[GPS_ROUTES_MAP.md](GPS_ROUTES_MAP.md)**.
 
 ## ✨ FLow
 

@@ -24,6 +24,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 20px;
         }
         
         .navbar h1 {
@@ -31,19 +32,31 @@
             color: #1f2937;
         }
         
+        .navbar-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 14px;
+        }
+
         .navbar-links a {
             color: #4b5563;
             text-decoration: none;
             font-weight: 500;
-            margin-left: 20px;
             padding: 8px 16px;
             border-radius: 6px;
             transition: all 0.2s;
         }
-        
+
         .navbar-links a:hover {
             background: #f3f4f6;
             color: #1f2937;
+            text-decoration: none;
+        }
+
+        .navbar-user {
+            color: #6b7280;
+            font-size: 14px;
         }
         
         .container {
@@ -125,9 +138,17 @@
 </head>
 <body>
     <div class="navbar">
-        <h1>🛡️ Admin - {% if mode == 'create' %}Create Organization{% else %}Edit Organization{% endif %}</h1>
+        <h1>🚦 Traffic Sign App</h1>
         <div class="navbar-links">
-            <a href="{{ url_for('admin.organizations') }}">Back to Organizations</a>
+            <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
+            <a href="{{ url_for('status.list_recordings') }}">Recordings</a>
+            <a href="{{ url_for('org_owner.routes_map') }}">GPS Map</a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            {% elif current_user.is_org_owner %}
+            <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
+            {% endif %}
+            <a href="{{ url_for('auth.logout') }}">Logout</a>
         </div>
     </div>
     

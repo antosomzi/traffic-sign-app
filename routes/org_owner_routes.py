@@ -1,10 +1,11 @@
 """Routes for organization owners to manage users in their organization"""
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
-from decorators.auth_decorators import org_owner_required
+from decorators.auth_decorators import org_owner_required, login_required
 from models.user import User
 from models.organization import Organization
+from services.geo_service import GeoService
 
 org_owner_bp = Blueprint('org_owner', __name__, url_prefix='/org_owner')
 
@@ -190,3 +191,71 @@ def reset_password(user_id):
         return redirect(url_for('org_owner.list_users'))
     
     return render_template('org_owner/reset_password.html', user=user)
+
+
+@org_owner_bp.route('/routes_map', methods=['GET'])
+@login_required
+def routes_map():
+    """Display map view of organization's GPS routes - accessible to all users in organization"""
+    org = Organization.get_by_id(current_user.organization_id)
+    return render_template('org_owner/routes_map.html', organization=org)
+
+
+@org_owner_bp.route('/api/routes', methods=['GET'])
+@login_required
+def get_routes_geojson():
+    """
+    API endpoint to get GPS routes as GeoJSON for the organization
+    Accessible to all authenticated users in the organization
+    
+    Query parameters:
+        - from: Start date (ISO format YYYY-MM-DD)
+        - to: End date (ISO format YYYY-MM-DD)
+        - recordings: Comma-separated recording IDs
+        - simplify: Simplification tolerance (float, optional)
+        - cache: Whether to use cache (default: true)
+    
+    Returns:
+        GeoJSON FeatureCollection with GPS traces
+    """
+    # Parse query parameters
+    from_date = request.args.get('from')
+    to_date = request.args.get('to')
+    recordings_param = request.args.get('recordings')
+    simplify_param = request.args.get('simplify')
+    use_cache = request.args.get('cache', 'true').lower() != 'false'
+    
+    # Parse recordings list
+    recording_ids = None
+    if recordings_param:
+        recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
+    
+    # Parse simplify tolerance
+    simplify = None
+    if simplify_param:
+        try:
+            simplify = float(simplify_param)
+            if simplify < 0:
+                simplify = None
+        except ValueError:
+            pass
+    
+    try:
+        # Generate GeoJSON
+        geojson = GeoService.organization_routes_to_geojson(
+            org_id=current_user.organization_id,
+            from_date=from_date,
+            to_date=to_date,
+            recording_ids=recording_ids,
+            simplify=simplify,
+            use_cache=use_cache
+        )
+        
+        return jsonify(geojson), 200
+    
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to generate routes",
+            "message": str(e)
+        }), 500
+
