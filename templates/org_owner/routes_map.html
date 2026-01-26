@@ -491,8 +491,8 @@
 
         // Color palette for routes
         const colors = [
-            '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00',
-            '#ffff33', '#a65628', '#f781bf', '#999999', '#66c2a5'
+            '#d62728', '#1f77b4', '#2ca02c', '#9467bd', '#ff7f0e',
+            '#bcbd22', '#8c564b', '#e377c2', '#7f7f7f', '#17becf'
         ];
         
         function getColorForRoute(index) {
@@ -623,8 +623,8 @@
                     style: function(feat) {
                         return {
                             color: getColorForRoute(index),
-                            weight: 3,
-                            opacity: 0.7
+                            weight: 5,  // Increased thickness
+                            opacity: 0.8
                         };
                     },
                     onEachFeature: function(feat, lyr) {
