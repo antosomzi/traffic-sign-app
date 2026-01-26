@@ -423,13 +423,32 @@
             maxZoom: 19
         }).addTo(map);
 
-        // Create marker cluster group
+        // Create marker cluster group with custom options for single-level clustering
         const markers = L.markerClusterGroup({
-            spiderfyOnMaxZoom: true,
+            spiderfyOnMaxZoom: false,  // Don't spiderfy
             showCoverageOnHover: false,
             zoomToBoundsOnClick: true,
             maxClusterRadius: 80,
-            disableClusteringAtZoom: 14  // Disable clustering at zoom level 14 and above
+            disableClusteringAtZoom: 14,  // Disable clustering at zoom level 14 and above
+            iconCreateFunction: function(cluster) {
+                // Custom function to create cluster icons with consistent styling
+                const childCount = cluster.getChildCount();
+
+                let c = ' marker-cluster-';
+                if (childCount < 10) {
+                    c += 'small';
+                } else if (childCount < 100) {
+                    c += 'medium';
+                } else {
+                    c += 'large';
+                }
+
+                return new L.DivIcon({
+                    html: '<div><span>' + childCount + '</span></div>',
+                    className: 'marker-cluster' + c,
+                    iconSize: new L.Point(40, 40)
+                });
+            }
         });
 
         // Store current routes layer
@@ -515,68 +534,11 @@
                 map.removeLayer(routesLayer);
             }
 
-            if (!geojson.features || geojson.features.length === 0) {
-                alert('No routes found for the selected filters.');
-                return;
-            }
-
-            // Check current zoom level to decide display mode
-            const currentZoom = map.getZoom();
-
-            if (currentZoom >= 14) {
-                // High zoom - display individual routes
-                displayIndividualRoutes(geojson);
-            } else {
-                // Low zoom - display clusters
-                displayRouteClusters(geojson);
-            }
-        }
-
-        function displayIndividualRoutes(geojson) {
             // Clear any existing clusters
             markers.clearLayers();
 
-            // Display routes as before
-            routesLayer = L.geoJSON(geojson, {
-                style: function(feature) {
-                    const index = geojson.features.indexOf(feature);
-                    return {
-                        color: getColorForRoute(index),
-                        weight: 3,
-                        opacity: 0.7
-                    };
-                },
-                onEachFeature: function(feature, layer) {
-                    if (feature.properties) {
-                        const props = feature.properties;
-                        const popupContent = `
-                            <div style="min-width: 200px;">
-                                <h6><strong>Route Info</strong></h6>
-                                <p><strong>User:</strong> ${escapeHtml(props.user_name || 'N/A')}</p>
-                                ${props.start_time ? `<p><strong>Start:</strong> ${new Date(props.start_time).toLocaleString()}</p>` : ''}
-                                ${props.end_time ? `<p><strong>End:</strong> ${new Date(props.end_time).toLocaleString()}</p>` : ''}
-                                ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
-                            </div>
-                        `;
-                        layer.bindPopup(popupContent);
-                    }
-                }
-            }).addTo(map);
-
-            // Fit map to routes
-            map.fitBounds(routesLayer.getBounds(), { padding: [50, 50] });
-        }
-
-        function displayRouteClusters(geojson) {
-            // Clear any existing routes layer
-            if (routesLayer) {
-                map.removeLayer(routesLayer);
-            }
-
-            // Clear existing clusters
-            markers.clearLayers();
-
             if (!geojson.features || geojson.features.length === 0) {
+                alert('No routes found for the selected filters.');
                 return;
             }
 
@@ -601,7 +563,6 @@
                         ${props.start_time ? `<p><strong>Start:</strong> ${new Date(props.start_time).toLocaleString()}</p>` : ''}
                         ${props.end_time ? `<p><strong>End:</strong> ${new Date(props.end_time).toLocaleString()}</p>` : ''}
                         ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
-                        <p><em>Click to view full route</em></p>
                     </div>
                 `;
 
@@ -643,6 +604,11 @@
 
             // Add clusters to map
             map.addLayer(markers);
+
+            // Fit map to bounds
+            if (markers.getBounds().isValid()) {
+                map.fitBounds(markers.getBounds(), { padding: [50, 50] });
+            }
         }
 
         // Function to calculate approximate center point of a route
