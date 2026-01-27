@@ -589,11 +589,11 @@
             geojson.features.forEach((feature, index) => {
                 const coordinates = feature.geometry.coordinates;
 
-                // Calculate approximate center point of the route
-                const center = calculateRouteCenter(coordinates);
+                // Calculate the median point of the route (middle coordinate)
+                const medianPoint = calculateRouteMedian(coordinates);
 
-                // Create marker at center point
-                const marker = L.marker([center.lat, center.lng], {
+                // Create marker at median point
+                const marker = L.marker([medianPoint.lat, medianPoint.lng], {
                     title: `Route: ${feature.properties.recording_id}`
                 });
 
@@ -649,27 +649,19 @@
             }
         }
 
-        // Function to calculate approximate center point of a route
-        function calculateRouteCenter(coordinates) {
+        // Function to calculate the median point of a route (middle coordinate)
+        function calculateRouteMedian(coordinates) {
             if (!coordinates || coordinates.length === 0) {
                 return { lat: 0, lng: 0 };
             }
 
-            let avgLat = 0;
-            let avgLng = 0;
-
-            // Calculate average of coordinates
-            for (let i = 0; i < coordinates.length; i++) {
-                avgLat += coordinates[i][1]; // latitude
-                avgLng += coordinates[i][0]; // longitude
-            }
-
-            avgLat /= coordinates.length;
-            avgLng /= coordinates.length;
+            // Find the middle coordinate in the route
+            const middleIndex = Math.floor(coordinates.length / 2);
+            const medianCoord = coordinates[middleIndex];
 
             return {
-                lat: avgLat,
-                lng: avgLng
+                lat: medianCoord[1], // latitude
+                lng: medianCoord[0]  // longitude
             };
         }
         
