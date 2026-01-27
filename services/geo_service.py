@@ -292,11 +292,11 @@ class GeoService:
         if simplify and simplify > 0:
             coordinates = GeoService._simplify_coordinates(coordinates, simplify)
 
-        # Get recording information to include uploader name
+        # Get recording information to include uploader name and metadata (consistent with /status page)
         recording_obj = Recording.get_by_id(recording_id)
         uploader_name = recording_obj.uploader_name if recording_obj else "Unknown"
 
-        # Build properties
+        # Build properties with metadata consistent with /status page
         properties = {
             "recording_id": recording_id,
             "device_id": device_id,
@@ -305,10 +305,14 @@ class GeoService:
             "user_name": uploader_name
         }
 
+        # Add recording metadata from database (same as used in /status page)
+        if recording_obj:
+            if recording_obj.recording_date:
+                properties["recording_date"] = recording_obj.recording_date.isoformat()
+
+        # Only add GPS-specific time information if available
         if timestamps:
-            properties["start_time"] = timestamps[0].isoformat()
-            properties["end_time"] = timestamps[-1].isoformat()
-            properties["duration_seconds"] = (timestamps[-1] - timestamps[0]).total_seconds()
+            properties["gps_duration_seconds"] = (timestamps[-1] - timestamps[0]).total_seconds()
 
         # Create GeoJSON Feature
         feature = {

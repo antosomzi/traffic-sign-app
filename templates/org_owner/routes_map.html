@@ -604,13 +604,27 @@
 
                 // Create popup content
                 const props = feature.properties;
+
+                // Format dates consistently with /status page
+                const formatDate = (dateStr) => {
+                    if (!dateStr) return 'N/A';
+                    try {
+                        // Add 'Z' to force interpretation as UTC
+                        return new Date(dateStr + 'Z').toLocaleString();
+                    } catch (e) {
+                        return dateStr;
+                    }
+                };
+
                 const popupContent = `
                     <div style="min-width: 200px;">
                         <h6><strong>Route Info</strong></h6>
                         <p><strong>User:</strong> ${escapeHtml(props.user_name || 'N/A')}</p>
-                        ${props.start_time ? `<p><strong>Start:</strong> ${new Date(props.start_time).toLocaleString()}</p>` : ''}
-                        ${props.end_time ? `<p><strong>End:</strong> ${new Date(props.end_time).toLocaleString()}</p>` : ''}
-                        ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
+                        ${props.recording_date ? `<p><strong>Recording Date:</strong> ${formatDate(props.recording_date)}</p>` : ''}
+                        ${props.upload_date ? `<p><strong>Upload Date:</strong> ${formatDate(props.upload_date)}</p>` : ''}
+                        ${props.gps_start_time ? `<p><strong>GPS Start:</strong> ${new Date(props.gps_start_time).toLocaleString()}</p>` : ''}
+                        ${props.gps_end_time ? `<p><strong>GPS End:</strong> ${new Date(props.gps_end_time).toLocaleString()}</p>` : ''}
+                        ${props.gps_duration_seconds ? `<p><strong>GPS Duration:</strong> ${formatDuration(props.gps_duration_seconds)}</p>` : ''}
                     </div>
                 `;
 
