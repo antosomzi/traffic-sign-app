@@ -336,6 +336,10 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
+
+        .invisible-marker {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -585,8 +589,19 @@
                 return;
             }
 
-            // Add only route polylines (no markers)
+            // Create invisible markers for clustering and add route polylines
             geojson.features.forEach((feature, index) => {
+                const coordinates = feature.geometry.coordinates;
+
+                // Calculate the median point of the route (middle coordinate)
+                const medianPoint = calculateRouteMedian(coordinates);
+
+                // Create an invisible marker for clustering purposes
+                const invisibleMarker = L.marker([medianPoint.lat, medianPoint.lng], {
+                    icon: L.divIcon({className: 'invisible-marker', html: '', iconSize: [0, 0]}),
+                    title: `Route: ${feature.properties.recording_id}`
+                });
+
                 // Create popup content
                 const props = feature.properties;
                 const popupContent = `
@@ -598,6 +613,11 @@
                         ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
                     </div>
                 `;
+
+                invisibleMarker.bindPopup(popupContent);
+
+                // Add invisible marker to cluster
+                markers.addLayer(invisibleMarker);
 
                 // Create and add the route polyline to the layer group
                 const routePolyline = L.geoJSON({
@@ -622,7 +642,10 @@
                 });
             });
 
-            // Add route polylines to map (no clusters/markers)
+            // Add clusters to map
+            map.addLayer(markers);
+
+            // Add route polylines to map
             map.addLayer(routesLayerGroup);
 
             // Fit map to bounds using the route polylines
