@@ -585,18 +585,8 @@
                 return;
             }
 
-            // Create markers for each route using the center point and add route polylines
+            // Add only route polylines (no markers)
             geojson.features.forEach((feature, index) => {
-                const coordinates = feature.geometry.coordinates;
-
-                // Calculate the median point of the route (middle coordinate)
-                const medianPoint = calculateRouteMedian(coordinates);
-
-                // Create marker at median point
-                const marker = L.marker([medianPoint.lat, medianPoint.lng], {
-                    title: `Route: ${feature.properties.recording_id}`
-                });
-
                 // Create popup content
                 const props = feature.properties;
                 const popupContent = `
@@ -608,11 +598,6 @@
                         ${props.duration_seconds ? `<p><strong>Duration:</strong> ${formatDuration(props.duration_seconds)}</p>` : ''}
                     </div>
                 `;
-
-                marker.bindPopup(popupContent);
-
-                // Add marker to cluster
-                markers.addLayer(marker);
 
                 // Create and add the route polyline to the layer group
                 const routePolyline = L.geoJSON({
@@ -637,15 +622,35 @@
                 });
             });
 
-            // Add clusters to map
-            map.addLayer(markers);
-
-            // Add route polylines to map
+            // Add route polylines to map (no clusters/markers)
             map.addLayer(routesLayerGroup);
 
-            // Fit map to bounds
-            if (markers.getBounds().isValid()) {
-                map.fitBounds(markers.getBounds(), { padding: [50, 50] });
+            // Fit map to bounds using the route polylines
+            if (geojson.features && geojson.features.length > 0) {
+                // Create bounds from the first feature's coordinates
+                let bounds;
+                for (const feature of geojson.features) {
+                    if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                        const coords = feature.geometry.coordinates;
+                        if (coords.length > 0) {
+                            bounds = L.latLngBounds(coords.map(coord => [coord[1], coord[0]])); // [lat, lng]
+                            break;
+                        }
+                    }
+                }
+
+                // Expand bounds to include all features
+                for (const feature of geojson.features) {
+                    if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                        const coords = feature.geometry.coordinates;
+                        const featureBounds = L.latLngBounds(coords.map(coord => [coord[1], coord[0]]));
+                        bounds.extend(featureBounds);
+                    }
+                }
+
+                if (bounds && bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
             }
         }
 
@@ -714,10 +719,31 @@
         });
 
         document.getElementById('fitBoundsBtn').addEventListener('click', function() {
-            if (routesLayerGroup && routesLayerGroup.getBounds && routesLayerGroup.getBounds().isValid()) {
-                map.fitBounds(routesLayerGroup.getBounds(), { padding: [50, 50] });
-            } else if (markers.getBounds().isValid()) {
-                map.fitBounds(markers.getBounds(), { padding: [50, 50] });
+            if (currentRoutes && currentRoutes.features && currentRoutes.features.length > 0) {
+                // Create bounds from the first feature's coordinates
+                let bounds;
+                for (const feature of currentRoutes.features) {
+                    if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                        const coords = feature.geometry.coordinates;
+                        if (coords.length > 0) {
+                            bounds = L.latLngBounds(coords.map(coord => [coord[1], coord[0]])); // [lat, lng]
+                            break;
+                        }
+                    }
+                }
+
+                // Expand bounds to include all features
+                for (const feature of currentRoutes.features) {
+                    if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length > 0) {
+                        const coords = feature.geometry.coordinates;
+                        const featureBounds = L.latLngBounds(coords.map(coord => [coord[1], coord[0]]));
+                        bounds.extend(featureBounds);
+                    }
+                }
+
+                if (bounds && bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
             }
         });
 
@@ -726,7 +752,6 @@
                 map.removeLayer(routesLayer);
                 routesLayer = null;
             }
-            markers.clearLayers();
             routesLayerGroup.clearLayers();
         });
         
