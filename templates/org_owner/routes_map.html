@@ -602,7 +602,7 @@
                     title: `Route: ${feature.properties.recording_id}`
                 });
 
-                // Create popup content
+                // Create popup content - only show recording date like on /status page
                 const props = feature.properties;
 
                 // Format dates consistently with /status page
@@ -620,11 +620,8 @@
                     <div style="min-width: 200px;">
                         <h6><strong>Route Info</strong></h6>
                         <p><strong>User:</strong> ${escapeHtml(props.user_name || 'N/A')}</p>
-                        ${props.recording_date ? `<p><strong>Recording Date:</strong> ${formatDate(props.recording_date)}</p>` : ''}
-                        ${props.upload_date ? `<p><strong>Upload Date:</strong> ${formatDate(props.upload_date)}</p>` : ''}
-                        ${props.gps_start_time ? `<p><strong>GPS Start:</strong> ${new Date(props.gps_start_time).toLocaleString()}</p>` : ''}
-                        ${props.gps_end_time ? `<p><strong>GPS End:</strong> ${new Date(props.gps_end_time).toLocaleString()}</p>` : ''}
-                        ${props.gps_duration_seconds ? `<p><strong>GPS Duration:</strong> ${formatDuration(props.gps_duration_seconds)}</p>` : ''}
+                        ${props.recording_date ? `<p><strong>Recording Date:</strong> ${formatDate(props.recording_date)}</p>` : '<p><strong>Recording Date:</strong> N/A</p>'}
+                        ${props.gps_duration_seconds ? `<p><strong>Trip Duration:</strong> ${formatDuration(props.gps_duration_seconds)}</p>` : '<p><strong>Trip Duration:</strong> N/A</p>'}
                     </div>
                 `;
 
