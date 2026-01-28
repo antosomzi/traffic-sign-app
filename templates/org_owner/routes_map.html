@@ -605,12 +605,12 @@
                 // Create popup content - only show recording date like on /status page
                 const props = feature.properties;
 
-                // Format dates consistently with /status page
+                // Format dates consistently with /status page (without forcing UTC interpretation)
                 const formatDate = (dateStr) => {
                     if (!dateStr) return 'N/A';
                     try {
-                        // Add 'Z' to force interpretation as UTC
-                        return new Date(dateStr + 'Z').toLocaleString();
+                        // Use the date string as-is to preserve original timezone
+                        return new Date(dateStr).toLocaleString();
                     } catch (e) {
                         return dateStr;
                     }
