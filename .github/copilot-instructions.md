@@ -95,8 +95,37 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Path detection**: Auto-detects EC2 (`/home/ec2-user` exists) vs local (script directory) for `BASE_PATH`
 - **Redis auth**: Controlled by `.env` file's `REDIS_PASSWORD` (optional for local, required for production)
 - **Job IDs**: UUID4 for extraction progress tracking (separate from `recording_id`)
-- **Status tracking**: `status.json` in each recording folder (fields: `status`, `message`, `timestamp`, `video_s3_key`)
+- **Status tracking**: `status.json` in each recording folder (fields: `status`, `message`, `timestamp`, `video_s3_key`, `validation_status`)
 - **Atomic operations**: Extract to `temp_extracts/<job_id>/`, validate, upload video to S3, then move to `recordings/` (prevents partial uploads)
+
+## Recording Validation & Signs Display
+
+**Validation Status** (stored in `status.json`):
+- `to_be_validated` (default): Recording completed but not yet reviewed
+- `validated`: Recording approved by user, signs imported to database
+
+**Signs Model** (`models/sign.py`):
+- Table: `signs` with columns: `id`, `recording_id`, `mutcd_code`, `latitude`, `longitude`, `created_at`
+- Foreign key to `recordings` with CASCADE delete
+- Bulk import from `result_pipeline_stable/s7_export_csv/signs.csv` on validation
+
+**Validation Flow**:
+1. User clicks "Validate" button on completed recording card (`/status` page)
+2. `POST /api/recording/<id>/validate` toggles `validation_status` in `status.json`
+3. On validate: `signs_service.import_signs_for_recording()` parses CSV and bulk inserts to DB
+4. On unvalidate: `Sign.delete_by_recording()` removes signs from DB
+
+**GPS Map Signs Layer** (`/map/`):
+- Signs displayed as markers only at zoom level 14+
+- Filter by recording ID and MUTCD code
+- API endpoints: `GET /map/api/signs` (GeoJSON), `GET /map/api/signs/filters` (filter options)
+- Toggle to show/hide signs layer
+- Zoom hint indicates when signs become visible
+
+**Migration**: Run `python migrations/add_validation_status.py` to:
+1. Create `signs` table if not exists
+2. Add `validation_status: "to_be_validated"` to all existing `status.json` files
+
 
 ## Job Queue & Status Tracking (`JOB_QUEUE_STATUS.md`)
 
@@ -158,6 +187,8 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Status Systems**: `JOB_QUEUE_STATUS.md` (Redis job tracking), `STATUS_POLLING.md` (frontend polling)
 - **Deployment**: `README.md`, `DEPLOYMENT.md`
 - **GPU configuration**: `pipeline/gpu/config.py`
-- **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner)
-- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization)
+- **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner, map)
+- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization, signs)
+- **Models**: `models/` (user, organization, recording, sign, auth_token, database)
 - **Decorators**: `decorators/auth_decorators.py` for access control
+- **Migrations**: `migrations/` (add_validation_status.py for signs feature)

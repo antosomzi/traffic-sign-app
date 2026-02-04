@@ -63,6 +63,10 @@ def create_app(config_class=Config):
     from routes.org_owner_routes import org_owner_bp
     app.register_blueprint(org_owner_bp)
     
+    # Import and register map blueprint (GPS routes, signs)
+    from routes.map_routes import map_bp
+    app.register_blueprint(map_bp)
+    
     # Import and register mobile auth blueprint
     from routes.mobile_auth_routes import api_bp
     app.register_blueprint(api_bp)

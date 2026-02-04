@@ -340,6 +340,141 @@
         .invisible-marker {
             display: none !important;
         }
+
+        /* Signs layer styles */
+        .sign-marker {
+            background: #ef4444;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .sign-popup {
+            min-width: 150px;
+        }
+
+        .sign-popup h6 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        .sign-popup p {
+            margin: 4px 0;
+            font-size: 12px;
+            color: #4b5563;
+        }
+
+        /* Signs filter section */
+        .signs-filter-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .signs-filter-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .signs-filter-header h6 {
+            margin: 0;
+            font-size: 14px;
+            color: #4b5563;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #d1d5db;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #10b981;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        .zoom-hint {
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        .signs-count-badge {
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Multi-select for signs filters */
+        .signs-filter-row {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .signs-filter-group {
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .signs-filter-group label {
+            font-size: 12px;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .signs-filter-group select {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 13px;
+            background: white;
+        }
     </style>
 </head>
 <body>
@@ -366,7 +501,7 @@
     <div class="container-fluid p-0">
         <div class="section-map">
             <div class="filter-card">
-                <h5>Filters</h5>
+                <h5>Routes Filters</h5>
                 <form id="filterForm" class="filter-form">
                     <div class="filter-row">
                         <div class="filter-group">
@@ -390,12 +525,36 @@
                                 ↻
                             </button>
                         </div>
-                        <div class="filter-group">
-                            <label class="form-label d-block">&nbsp;</label>
-                            <button type="submit" class="btn btn-primary w-100">Apply Filter</button>
-                        </div>
                     </div>
                 </form>
+
+                <!-- Signs Filter Section -->
+                <div class="signs-filter-section">
+                    <div class="signs-filter-header">
+                        <h6>🚦 Traffic Signs <span class="signs-count-badge" id="signsCountBadge">0</span></h6>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="zoom-hint" id="zoomHint">Show signs on map</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="signsToggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="signs-filter-row">
+                        <div class="signs-filter-group">
+                            <label for="signsRecording">Recording</label>
+                            <select id="signsRecording" class="form-control">
+                                <option value="">All Recordings</option>
+                            </select>
+                        </div>
+                        <div class="signs-filter-group">
+                            <label for="signsMutcdCode">Sign Type (MUTCD)</label>
+                            <select id="signsMutcdCode" class="form-control">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div id="map" class="map-container"></div>
@@ -552,7 +711,7 @@
             // Cache is now handled server-side by default, no need to send cache parameter
 
             // Fetch GeoJSON from API
-            fetch(`{{ url_for('org_owner.get_routes_geojson') }}?${params.toString()}`)
+            fetch(`{{ url_for('map.get_routes_geojson') }}?${params.toString()}`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -733,7 +892,7 @@
             }
 
             // Call the refresh cache endpoint with the same parameters
-            fetch(`{{ url_for('org_owner.refresh_routes_cache') }}?${params.toString()}`, {
+            fetch(`{{ url_for('map.refresh_routes_cache') }}?${params.toString()}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -781,12 +940,175 @@
             }
         });
 
-        document.getElementById('clearBtn').addEventListener('click', function() {
-            if (routesLayer) {
-                map.removeLayer(routesLayer);
-                routesLayer = null;
+        // ============================================
+        // SIGNS LAYER MANAGEMENT
+        // ============================================
+
+        // Signs layer group
+        const signsLayerGroup = L.layerGroup();
+        var signsData = null;
+        var signsVisible = true;
+        const MIN_ZOOM_FOR_SIGNS = 14; // Only show signs at zoom level 14 and above
+
+        // Sign icon
+        const signIcon = L.divIcon({
+            className: 'sign-marker-wrapper',
+            html: '<div style="background: #ef4444; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+        });
+
+        // Load signs filter options
+        function loadSignsFilterOptions() {
+            fetch(`{{ url_for('map.get_signs_filter_options') }}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Populate recordings dropdown
+                    const recordingSelect = document.getElementById('signsRecording');
+                    recordingSelect.innerHTML = '<option value="">All Recordings</option>';
+                    if (data.recordings) {
+                        data.recordings.forEach(recId => {
+                            const option = document.createElement('option');
+                            option.value = recId;
+                            option.textContent = recId;
+                            recordingSelect.appendChild(option);
+                        });
+                    }
+
+                    // Populate MUTCD codes dropdown
+                    const mutcdSelect = document.getElementById('signsMutcdCode');
+                    mutcdSelect.innerHTML = '<option value="">All Types</option>';
+                    if (data.mutcd_codes) {
+                        data.mutcd_codes.forEach(code => {
+                            const option = document.createElement('option');
+                            option.value = code;
+                            option.textContent = code;
+                            mutcdSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading signs filter options:', error);
+                });
+        }
+
+        // Load signs data
+        function loadSigns() {
+            const recordingId = document.getElementById('signsRecording').value;
+            const mutcdCode = document.getElementById('signsMutcdCode').value;
+
+            const params = new URLSearchParams();
+            if (recordingId) {
+                params.append('recordings', recordingId);
             }
-            routesLayerGroup.clearLayers();
+            if (mutcdCode) {
+                params.append('mutcd_codes', mutcdCode);
+            }
+
+            fetch(`{{ url_for('map.get_signs_geojson_api') }}?${params.toString()}`)
+                .then(response => response.json())
+                .then(data => {
+                    signsData = data;
+                    updateSignsCount();
+                    displaySigns();
+                })
+                .catch(error => {
+                    console.error('Error loading signs:', error);
+                });
+        }
+
+        // Update signs count badge
+        function updateSignsCount() {
+            const countBadge = document.getElementById('signsCountBadge');
+            if (signsData && signsData.features) {
+                countBadge.textContent = signsData.features.length;
+            } else {
+                countBadge.textContent = '0';
+            }
+        }
+
+        // Update zoom hint - now just shows toggle status
+        function updateZoomHint() {
+            // No longer needed - text is static
+        }
+
+        // Display signs on map
+        function displaySigns() {
+            // Clear existing signs
+            signsLayerGroup.clearLayers();
+
+            const currentZoom = map.getZoom();
+            const signsToggle = document.getElementById('signsToggle');
+            signsVisible = signsToggle.checked;
+
+            // Only show signs if toggle is on and zoom is sufficient
+            if (!signsVisible || currentZoom < MIN_ZOOM_FOR_SIGNS) {
+                return;
+            }
+
+            if (!signsData || !signsData.features || signsData.features.length === 0) {
+                return;
+            }
+
+            // Add sign markers
+            signsData.features.forEach(feature => {
+                if (feature.geometry && feature.geometry.type === 'Point') {
+                    const coords = feature.geometry.coordinates;
+                    const props = feature.properties;
+
+                    const marker = L.marker([coords[1], coords[0]], { icon: signIcon });
+
+                    // Create popup
+                    const popupContent = `
+                        <div class="sign-popup">
+                            <h6>🚦 ${escapeHtml(props.mutcd_code)}</h6>
+                            <p><strong>Recording:</strong> ${escapeHtml(props.recording_id)}</p>
+                            <p><strong>Lat:</strong> ${coords[1].toFixed(6)}</p>
+                            <p><strong>Lon:</strong> ${coords[0].toFixed(6)}</p>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+
+                    signsLayerGroup.addLayer(marker);
+                }
+            });
+
+            // Add layer to map
+            if (!map.hasLayer(signsLayerGroup)) {
+                map.addLayer(signsLayerGroup);
+            }
+        }
+
+        // Handle zoom changes
+        map.on('zoomend', function() {
+            updateZoomHint();
+            displaySigns();
+        });
+
+        // Signs toggle handler
+        document.getElementById('signsToggle').addEventListener('change', function() {
+            signsVisible = this.checked;
+            if (signsVisible) {
+                displaySigns();
+            } else {
+                signsLayerGroup.clearLayers();
+            }
+        });
+
+        // Auto-apply signs filter on change
+        document.getElementById('signsRecording').addEventListener('change', loadSigns);
+        document.getElementById('signsMutcdCode').addEventListener('change', loadSigns);
+
+        // Auto-apply routes filter on change
+        document.getElementById('fromDate').addEventListener('change', loadRoutes);
+        document.getElementById('toDate').addEventListener('change', loadRoutes);
+        document.getElementById('userId').addEventListener('change', loadRoutes);
+
+        // Load signs on page load
+        window.addEventListener('load', function() {
+            loadSignsFilterOptions();
+            loadSigns();
+            updateZoomHint();
         });
         
         // Auto-load routes on page load

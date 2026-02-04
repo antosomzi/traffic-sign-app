@@ -94,6 +94,30 @@ def init_db():
         ON auth_tokens(user_id)
     """)
     
+    # Create signs table (for storing detected traffic signs)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS signs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recording_id TEXT NOT NULL,
+            mutcd_code TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
+        )
+    """)
+    
+    # Create indexes for signs table
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_signs_recording_id 
+        ON signs(recording_id)
+    """)
+    
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_signs_mutcd_code 
+        ON signs(mutcd_code)
+    """)
+    
     conn.commit()
     conn.close()
     

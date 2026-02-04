@@ -88,6 +88,9 @@ For detailed deployment, Nginx configuration, and SSL setup, see **[DEPLOYMENT.m
 - **Asynchronous Processing**: Upload and process recordings without blocking
 - **Multi-tenant Support**: Organization-based access control and data isolation
 - **Role-based Access**: Admin, Organization Owner, and User roles with appropriate permissions
+- **Dual Authentication System**: 
+  - Web interface with Flask-Login sessions (see **[AUTHENTICATION.md](AUTHENTICATION.md)**)
+  - Mobile API with Bearer token authentication (see **[AUTHENTICATION_MOBILE.md](AUTHENTICATION_MOBILE.md)**)
 - **Video Storage in S3**: Cost-efficient video storage (13x cheaper than EFS)
 - **Redis Caching**: Fast status checks and data retrieval with 1-hour TTL
 
@@ -308,6 +311,11 @@ recording_id/
 
 ## 🔒 Security
 
+- **Authentication**: 
+  - Web interface: Flask-Login with signed session cookies (see **[AUTHENTICATION.md](AUTHENTICATION.md)**)
+  - Mobile API: Bearer token authentication with 365-day validity (see **[AUTHENTICATION_MOBILE.md](AUTHENTICATION_MOBILE.md)**)
+- **Role-based Access Control**: Admin, Organization Owner, and User roles with fine-grained permissions
+- **Multi-tenant Isolation**: Organization-based data segregation
 - **ZipSlip protection**: Validates file paths during extraction
 - **Strict validation**: Enforces expected folder structure
 - **File size limit**: 8 GB maximum

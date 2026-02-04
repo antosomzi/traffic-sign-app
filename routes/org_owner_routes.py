@@ -1,11 +1,10 @@
 """Routes for organization owners to manage users in their organization"""
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import current_user
-from decorators.auth_decorators import org_owner_required, login_required
+from decorators.auth_decorators import org_owner_required
 from models.user import User
 from models.organization import Organization
-from services.geo_service import GeoService
 
 org_owner_bp = Blueprint('org_owner', __name__, url_prefix='/org_owner')
 
@@ -191,122 +190,3 @@ def reset_password(user_id):
         return redirect(url_for('org_owner.list_users'))
     
     return render_template('org_owner/reset_password.html', user=user)
-
-
-@org_owner_bp.route('/routes_map', methods=['GET'])
-@login_required
-def routes_map():
-    """Display map view of organization's GPS routes - accessible to all users in organization"""
-    org = Organization.get_by_id(current_user.organization_id)
-    return render_template('org_owner/routes_map.html', organization=org)
-
-
-@org_owner_bp.route('/api/routes', methods=['GET'])
-@login_required
-def get_routes_geojson():
-    """
-    API endpoint to get GPS routes as GeoJSON for the organization
-    Accessible to all authenticated users in the organization
-
-    Query parameters:
-        - from: Start date (ISO format YYYY-MM-DD)
-        - to: End date (ISO format YYYY-MM-DD)
-        - recordings: Comma-separated recording IDs
-        - user_id: Filter by specific user ID
-        - simplify: Simplification tolerance (float, optional)
-
-    Returns:
-        GeoJSON FeatureCollection with GPS traces
-    """
-    # Parse query parameters
-    from_date = request.args.get('from')
-    to_date = request.args.get('to')
-    recordings_param = request.args.get('recordings')
-    user_id = request.args.get('user_id')
-
-    # Parse recordings list
-    recording_ids = None
-    if recordings_param:
-        recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
-
-    # Parse user ID
-    user_ids = None
-    if user_id:
-        user_ids = [user_id]
-
-    # Simplification is fixed server-side; frontend should not supply a value.
-    simplify = None
-
-    try:
-        # Generate GeoJSON with cache enabled by default
-        geojson = GeoService.organization_routes_to_geojson(
-            org_id=current_user.organization_id,
-            from_date=from_date,
-            to_date=to_date,
-            recording_ids=recording_ids,
-            user_ids=user_ids,
-            use_cache=True  # Cache is now always enabled by default
-        )
-
-        return jsonify(geojson), 200
-
-    except Exception as e:
-        print(f"Error in get_routes_geojson: {e}")
-        return jsonify({
-            "error": "Failed to generate routes",
-            "message": str(e)
-        }), 500
-
-
-@org_owner_bp.route('/api/routes/refresh_cache', methods=['POST'])
-@login_required
-def refresh_routes_cache():
-    """
-    API endpoint to refresh the GPS routes cache for the organization
-    Invalidates the current cache so the next request will regenerate it
-
-    Query parameters:
-        - from: Start date (ISO format YYYY-MM-DD)
-        - to: End date (ISO format YYYY-MM-DD)
-        - recordings: Comma-separated recording IDs
-        - user_id: Filter by specific user ID
-    """
-    try:
-        # Parse query parameters to match the same filters used in get_routes_geojson
-        from_date = request.args.get('from')
-        to_date = request.args.get('to')
-        recordings_param = request.args.get('recordings')
-        user_id = request.args.get('user_id')
-
-        # Parse recordings list
-        recording_ids = None
-        if recordings_param:
-            recording_ids = [rid.strip() for rid in recordings_param.split(',') if rid.strip()]
-
-        # Parse user ID
-        user_ids = None
-        if user_id:
-            user_ids = [user_id]
-
-        # Call the service method to refresh cache with the same parameters
-        result = GeoService.refresh_organization_routes_cache(
-            org_id=current_user.organization_id,
-            from_date=from_date,
-            to_date=to_date,
-            recording_ids=recording_ids,
-            user_ids=user_ids
-        )
-
-        return jsonify({
-            "success": True,
-            "message": "Cache refreshed successfully"
-        }), 200
-
-    except Exception as e:
-        # Log the error but return success anyway to avoid frontend issues
-        print(f"Cache refresh error (proceeding anyway): {e}")
-        return jsonify({
-            "success": True,
-            "message": "Cache refresh attempted"
-        }), 200
-

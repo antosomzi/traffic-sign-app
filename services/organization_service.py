@@ -94,9 +94,16 @@ class OrganizationService:
     @staticmethod
     def delete_recording(recording_id):
         """
-        Delete a recording from the database
+        Delete a recording from the database.
+        Also deletes associated signs (even though there's a CASCADE, SQLite
+        doesn't enforce foreign keys by default).
         
         Args:
             recording_id: Recording ID string
         """
+        # Delete associated signs first (explicit delete for SQLite compatibility)
+        from models.sign import Sign
+        Sign.delete_by_recording(recording_id)
+        
+        # Then delete the recording
         Recording.delete(recording_id)

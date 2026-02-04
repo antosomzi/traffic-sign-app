@@ -8,7 +8,9 @@ from flask_login import login_required, current_user
 from decorators.auth_decorators import auth_required
 from config import Config
 from services.organization_service import OrganizationService
+from services.signs_service import import_signs_for_recording, delete_signs_for_recording
 from models.user import User
+from models.recording import Recording
 
 status_bp = Blueprint("status", __name__)
 
@@ -64,6 +66,7 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
         status_message = ""
         timestamp = None
         error_details = None
+        validation_status = "to_be_validated"  # Default validation status
 
         if os.path.isfile(status_file):
             try:
@@ -73,6 +76,7 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
                     status_message = status_data.get("message", "")
                     timestamp = status_data.get("timestamp", None)
                     error_details = status_data.get("error_details", None)
+                    validation_status = status_data.get("validation_status", "to_be_validated")
             except Exception:
                 # Ignore malformed JSON and fall back to defaults
                 pass
@@ -156,6 +160,7 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
             "show_steps": show_steps,
             "steps": step_status if show_steps else None,
             "error_details": error_details,
+            "validation_status": validation_status,
             "user_id": rec.user_id,
             "uploader_name": rec.uploader_name,
             "upload_date": rec.upload_date.isoformat() if rec.upload_date else None,
@@ -225,4 +230,78 @@ def get_organization_users():
     org_users = User.get_by_organization(current_user.organization_id)
     return jsonify({
         "users": [{"id": u.id, "name": u.name} for u in org_users]
+    })
+
+
+@status_bp.route("/api/recording/<recording_id>/validate", methods=["POST"])
+@login_required
+def toggle_validation(recording_id):
+    """
+    Toggle the validation status of a recording.
+    
+    Request body (JSON):
+        - validated: boolean (true to validate, false to unvalidate)
+    
+    Returns:
+        JSON with validation_status and signs_count
+    """
+    # Check recording exists and belongs to user's organization
+    recording = Recording.get_by_id(recording_id)
+    if not recording:
+        return jsonify({"error": "Recording not found"}), 404
+    
+    if recording.organization_id != current_user.organization_id:
+        return jsonify({"error": "Access denied"}), 403
+    
+    # Parse request body
+    data = request.get_json() or {}
+    validated = data.get('validated', True)
+    
+    # Check that recording is completed before allowing validation
+    rec_folder = os.path.join(Config.EXTRACT_FOLDER, recording_id)
+    status_file = os.path.join(rec_folder, "status.json")
+    
+    if not os.path.isfile(status_file):
+        return jsonify({"error": "Recording status not found"}), 404
+    
+    try:
+        with open(status_file, "r") as f:
+            status_data = json.load(f)
+    except Exception as e:
+        return jsonify({"error": f"Failed to read status: {str(e)}"}), 500
+    
+    # Check if pipeline is completed
+    current_status = status_data.get("status", "")
+    if current_status != "completed":
+        return jsonify({
+            "error": "Only completed recordings can be validated",
+            "current_status": current_status
+        }), 400
+    
+    # Update validation status
+    new_validation_status = "validated" if validated else "to_be_validated"
+    status_data["validation_status"] = new_validation_status
+    status_data["validated_by"] = current_user.id if validated else None
+    status_data["validated_at"] = datetime.now().isoformat() if validated else None
+    
+    try:
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception as e:
+        return jsonify({"error": f"Failed to save status: {str(e)}"}), 500
+    
+    # Import or delete signs based on validation status
+    signs_count = 0
+    if validated:
+        # Import signs from CSV to database
+        signs_count = import_signs_for_recording(recording_id)
+    else:
+        # Delete signs from database when unvalidating
+        delete_signs_for_recording(recording_id)
+    
+    return jsonify({
+        "success": True,
+        "validation_status": new_validation_status,
+        "signs_count": signs_count,
+        "recording_id": recording_id
     })

@@ -167,7 +167,7 @@
         <div class="navbar-links">
             <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
             <a href="{{ url_for('status.list_recordings') }}">Recordings</a>
-            <a href="{{ url_for('org_owner.routes_map') }}">GPS Map</a>
+            <a href="{{ url_for('map.routes_map') }}">GPS Map</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
             {% elif current_user.is_org_owner %}

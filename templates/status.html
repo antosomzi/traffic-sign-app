@@ -721,6 +721,66 @@
         .uploader-info .user-icon {
             font-size: 14px;
         }
+
+        /* Validation button styles - updated to match status badge */
+        .validate-btn {
+            background: #e2e8f0; /* Default gray for "To be validated" */
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 8px;
+        }
+
+        .validate-btn:hover:not(:disabled) {
+            background: #cbd5e1;
+            transform: translateY(-1px);
+        }
+
+        .validate-btn.validated {
+            background: #ecfccb; /* Light green bg */
+            color: #3f6212; /* Dark green text */
+            border-color: #bef264;
+        }
+
+        .validate-btn.validated:hover:not(:disabled) {
+            background: #d9f99d;
+        }
+
+        .validate-btn:disabled {
+            background: #f1f5f9;
+            color: #94a3b8;
+            border-color: #e2e8f0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .validation-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .validation-badge.validated {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .validation-badge.to_be_validated {
+            background: #fef3c7;
+            color: #92400e;
+        }
     </style>
 </head>
 <body>
@@ -729,7 +789,7 @@
         <div class="navbar-links">
             <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
             <a href="{{ url_for('upload.index') }}">Upload</a>
-            <a href="{{ url_for('org_owner.routes_map') }}">GPS Map</a>
+            <a href="{{ url_for('map.routes_map') }}">GPS Map</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
             {% elif current_user.is_org_owner %}
@@ -826,6 +886,20 @@
                                         📋 {{ rec.status|title }}
                                     {% endif %}
                                 </span>
+                                {% if rec.status == "completed" %}
+                                <button
+                                    class="validate-btn {% if rec.validation_status == 'validated' %}validated{% endif %}"
+                                    data-recording-id="{{ rec.id }}"
+                                    data-validation-status="{{ rec.validation_status }}"
+                                    title="{% if rec.validation_status == 'validated' %}Click to unvalidate this recording{% else %}Click to validate this recording{% endif %}"
+                                >
+                                    {% if rec.validation_status == 'validated' %}
+                                        ✓ Validated
+                                    {% else %}
+                                        To be validated
+                                    {% endif %}
+                                </button>
+                                {% endif %}
                             </div>
                             {% if rec.upload_date %}
                             <div class="recording-upload-date">
@@ -899,7 +973,7 @@
                 {% endif %}
 
                 {% if rec.status == "completed" %}
-                <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; align-items: center;">
                     <a href="/download/{{ rec.id }}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
                     <a href="/download/{{ rec.id }}/csv-only" class="download-btn">📊 Download CSV Only</a>
                 </div>
@@ -1311,15 +1385,37 @@
             </div>`;
         }
 
+        // Configuration object for validation button states
+        const VALIDATION_CONFIG = {
+            validated: {
+                btnClass: 'validate-btn validated',
+                text: '✓ Validated',
+                title: 'Click to unvalidate this recording'
+            },
+            to_be_validated: {
+                btnClass: 'validate-btn',
+                text: 'To be validated',
+                title: 'Click to validate this recording'
+            }
+        };
+
+        function renderValidationButton(rec) {
+            if (rec.status !== 'completed') return '';
+            
+            const status = rec.validation_status || 'to_be_validated';
+            const config = VALIDATION_CONFIG[status] || VALIDATION_CONFIG.to_be_validated;
+            
+            return `<button class="${config.btnClass}" data-recording-id="${escapeHtml(rec.id)}" 
+                data-validation-status="${escapeHtml(status)}" title="${config.title}">${config.text}</button>`;
+        }
+
         function renderRecordingCardHTML(rec) {
             const badge = buildStatusBadge(rec);
-            const rerunDisabled = rec.status === 'processing';
-            const rerunTitle = rerunDisabled
-                ? 'Cannot re-run while processing'
-                : 'Re-run pipeline for this recording';
-            const deleteTitle = 'Delete this recording';
+            const isProcessing = rec.status === 'processing';
+            const validationButton = renderValidationButton(rec); // Will be empty string if not completed
+            
             const downloadLink = rec.status === 'completed'
-                ? `<div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap;">
+                ? `<div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; align-items: center;">
                     <a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
                     <a href="/download/${encodeURIComponent(rec.id)}/csv-only" class="download-btn">📊 Download CSV Only</a>
                    </div>`
@@ -1340,6 +1436,7 @@
                                 <span class="${badge.className}">
                                     ${badge.label}
                                 </span>
+                                ${validationButton}
                             </div>
                             ${uploadDate ? `<div class="recording-upload-date">📤 Uploaded: ${escapeHtml(uploadDate)}</div>` : ''}
                             <div class="uploader-info">
@@ -1352,26 +1449,15 @@
                         <button
                             class="rerun-btn"
                             data-recording-id="${escapeHtml(rec.id)}"
-                            ${rerunDisabled ? 'disabled' : ''}
-                            title="${escapeHtml(rerunTitle)}"
+                            ${isProcessing ? 'disabled' : ''}
+                            title="${isProcessing ? 'Cannot re-run while processing' : 'Re-run pipeline for this recording'}"
                         >
                             ↻
                         </button>
-                        ${isLocalMode ? `<button
-                            class="test-error-btn"
-                            data-recording-id="${escapeHtml(rec.id)}"
-                            ${rerunDisabled ? 'disabled' : ''}
-                            title="${rerunDisabled ? 'Cannot test while processing' : 'Simulate pipeline error (test only)'}"
-                        >
-                            ⚠️
-                        </button>` : ''}
-                        <button
-                            class="delete-btn"
-                            data-recording-id="${escapeHtml(rec.id)}"
-                            title="${escapeHtml(deleteTitle)}"
-                        >
-                            ×
-                        </button>
+                        ${isLocalMode ? `<button class="test-error-btn" data-recording-id="${escapeHtml(rec.id)}" 
+                            ${isProcessing ? 'disabled' : ''} 
+                            title="${isProcessing ? 'Cannot test while processing' : 'Simulate pipeline error (test only)'}">⚠️</button>` : ''}
+                        <button class="delete-btn" data-recording-id="${escapeHtml(rec.id)}" title="Delete this recording">×</button>
                     </div>
                 </div>
                 ${renderMessage(rec)}
@@ -1515,6 +1601,15 @@
                 button.addEventListener('click', handleTestErrorClick);
                 button.dataset.listenerAttached = 'true';
             });
+
+            document.querySelectorAll('.validate-btn').forEach((button) => {
+                if (button.dataset.listenerAttached === 'true') {
+                    return;
+                }
+
+                button.addEventListener('click', handleValidateClick);
+                button.dataset.listenerAttached = 'true';
+            });
         }
 
         async function handleRerunClick(event) {
@@ -1627,6 +1722,86 @@
             } catch (error) {
                 alert(`Failed to simulate error: ${error.message || error}`);
                 testBtn.disabled = false;
+                resumeStatusPolling();
+            }
+        }
+
+        async function handleValidateClick(event) {
+            event.preventDefault();
+
+            const validateBtn = event.currentTarget;
+            const recordingId = validateBtn.dataset.recordingId;
+            const currentValidationStatus = validateBtn.dataset.validationStatus;
+            const isCurrentlyValidated = currentValidationStatus === 'validated';
+            const newValidated = !isCurrentlyValidated;
+            const originalText = validateBtn.innerHTML;
+
+            const actionText = newValidated ? 'validate' : 'unvalidate';
+            const confirmed = await showConfirmModal({
+                title: newValidated ? 'Validate Recording' : 'Unvalidate Recording',
+                icon: newValidated ? '✓' : '☐',
+                iconClass: 'warning',
+                message: newValidated
+                    ? `Validate recording <div class="modal-recording-id">${escapeHtml(recordingId)}</div>This will mark the recording as validated and import detected signs to the map.`
+                    : `Unvalidate recording <div class="modal-recording-id">${escapeHtml(recordingId)}</div>This will remove the validation status and delete associated signs from the map.`,
+                confirmText: newValidated ? 'Validate' : 'Unvalidate',
+                confirmClass: ''
+            });
+
+            if (!confirmed) {
+                return;
+            }
+
+            pauseStatusPolling();
+
+            try {
+                validateBtn.disabled = true;
+                validateBtn.innerHTML = '⏳ Processing...';
+
+                const response = await fetch(`/api/recording/${encodeURIComponent(recordingId)}/validate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ validated: newValidated })
+                });
+
+                let result = null;
+                try {
+                    result = await response.json();
+                } catch (jsonError) {
+                    result = null;
+                }
+
+                if (!response.ok) {
+                    const serverMessage = result && result.error ? `: ${result.error}` : `: ${response.statusText}`;
+                    throw new Error(`HTTP ${response.status}${serverMessage}`);
+                }
+
+                if (!result || !result.success) {
+                    throw new Error(result && result.error ? result.error : 'Failed to update validation status.');
+                }
+
+                // Update button state
+                const newStatus = result.validation_status;
+                const isNowValidated = newStatus === 'validated';
+                validateBtn.dataset.validationStatus = newStatus;
+                validateBtn.className = isNowValidated ? 'validate-btn validated' : 'validate-btn';
+                validateBtn.innerHTML = isNowValidated ? '✓ Validated' : 'To be validated';
+                validateBtn.title = isNowValidated ? 'Click to unvalidate this recording' : 'Click to validate this recording';
+                validateBtn.disabled = false;
+
+                // Show signs count message if validating
+                if (isNowValidated && result.signs_count !== undefined) {
+                    console.log(`Imported ${result.signs_count} signs for recording ${recordingId}`);
+                }
+
+                await fetchStatuses();
+                resumeStatusPolling();
+            } catch (error) {
+                alert(`Failed to ${actionText} recording: ${error.message || error}`);
+                validateBtn.disabled = false;
+                validateBtn.innerHTML = originalText;
                 resumeStatusPolling();
             }
         }
