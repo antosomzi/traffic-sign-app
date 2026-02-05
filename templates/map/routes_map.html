@@ -501,7 +501,12 @@
     <div class="container-fluid p-0">
         <div class="section-map">
             <div class="filter-card">
-                <h5>Routes Filters</h5>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h5 style="margin-bottom: 0;">Routes Filters</h5>
+                    <button type="button" class="rerun-btn" id="refreshCacheBtn" title="Refresh cache">
+                        ↻
+                    </button>
+                </div>
                 <form id="filterForm" class="filter-form">
                     <div class="filter-row">
                         <div class="filter-group">
@@ -518,26 +523,24 @@
                                 <option value="">All Users</option>
                             </select>
                         </div>
-                        <!-- Simplification controlled on backend; removed from frontend -->
-                        <div class="filter-group">
-                            <label class="form-label d-block">&nbsp;</label>
-                            <button type="button" class="rerun-btn" id="refreshCacheBtn" title="Refresh cache">
-                                ↻
-                            </button>
-                        </div>
                     </div>
                 </form>
 
                 <!-- Signs Filter Section -->
                 <div class="signs-filter-section">
                     <div class="signs-filter-header">
-                        <h6>🚦 Traffic Signs <span class="signs-count-badge" id="signsCountBadge">0</span></h6>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="zoom-hint" id="zoomHint">Show signs on map</span>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="signsToggle" checked>
-                                <span class="toggle-slider"></span>
-                            </label>
+                        <h5>Traffic sign Filters</h5>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <h6 style="margin: 0; font-size: 14px; color: #4b5563; display: flex; align-items: center; gap: 6px;">
+                                🚦 Traffic Signs <span class="signs-count-badge" id="signsCountBadge">0</span>
+                            </h6>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span class="zoom-hint" id="zoomHint">Show signs on map</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="signsToggle" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="signs-filter-row">
@@ -948,7 +951,7 @@
         const signsLayerGroup = L.layerGroup();
         var signsData = null;
         var signsVisible = true;
-        const MIN_ZOOM_FOR_SIGNS = 14; // Only show signs at zoom level 14 and above
+        const MIN_ZOOM_FOR_SIGNS = 11; // Only show signs at zoom level 14 and above
 
         // Sign icon
         const signIcon = L.divIcon({
