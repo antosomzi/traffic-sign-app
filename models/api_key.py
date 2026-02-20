@@ -70,8 +70,8 @@ class APIKey:
             for row in rows:
                 key_id, user_id, key_hash, expires_at, revoked = row
 
-                # Check if revoked
-                if revoked:
+                # Check if revoked (convert to int for safety)
+                if int(revoked) == 1:
                     continue
 
                 # Check if expired
