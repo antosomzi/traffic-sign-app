@@ -168,6 +168,7 @@
             {% if current_user.is_org_owner %}
             <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
             {% endif %}
+            <a href="{{ url_for('admin.list_api_keys') }}">API Keys</a>
             <a href="{{ url_for('auth.logout') }}">Logout</a>
         </div>
     </div>
@@ -230,10 +231,11 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2>Quick Links</h2>
             </div>
-            
+
             <div style="display: flex; gap: 15px;">
                 <a href="{{ url_for('admin.organizations') }}" class="btn btn-primary">Manage Organizations</a>
                 <a href="{{ url_for('admin.users') }}" class="btn btn-primary">Manage Users</a>
+                <a href="{{ url_for('admin.list_api_keys') }}" class="btn btn-primary">API Keys</a>
             </div>
         </div>
     </div>

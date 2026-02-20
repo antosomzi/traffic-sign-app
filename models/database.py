@@ -114,11 +114,31 @@ def init_db():
     """)
     
     cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_signs_mutcd_code 
+        CREATE INDEX IF NOT EXISTS idx_signs_mutcd_code
         ON signs(mutcd_code)
     """)
-    
+
+    # Create api_keys table (for B2B API authentication)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT,
+            key_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP,
+            revoked INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    # Create indexes for api_keys
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_api_keys_user_id
+        ON api_keys(user_id)
+    """)
+
     conn.commit()
     conn.close()
-    
+
     print(f"✅ Database initialized at: {db_path}")

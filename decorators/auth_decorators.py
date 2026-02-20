@@ -2,8 +2,9 @@
 
 from functools import wraps
 from flask import redirect, url_for, flash, request, jsonify
-from flask_login import current_user
+from flask_login import current_user, login_user
 from models.auth_token import AuthToken
+from models.api_key import APIKey
 from models.user import User
 
 
@@ -56,28 +57,65 @@ def token_required(f):
     def decorated_function(*args, **kwargs):
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
-        
+
         if not auth_header:
             return jsonify({"error": "Authorization header missing"}), 401
-        
+
         # Extract token (format: "Bearer <token>")
         try:
             token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
         except IndexError:
             return jsonify({"error": "Invalid authorization header format"}), 401
-        
+
         # Verify token and get user
         user_id = AuthToken.get_by_token(token)
         if not user_id:
             return jsonify({"error": "Invalid or expired token"}), 401
-        
+
         user = User.get_by_id(user_id)
         if not user:
             return jsonify({"error": "User not found"}), 401
-        
+
         # Pass user to the route function
         return f(user, *args, **kwargs)
-    
+
+    return decorated_function
+
+
+def api_key_required(f):
+    """Decorator to require valid API key for B2B API routes
+
+    Expects API key in X-API-Key header.
+    Returns 401 if API key is missing or invalid.
+
+    Usage:
+        @download_bp.route("/download/csv-only-range", methods=["GET"])
+        @api_key_required
+        def download_csv_only_range():
+            # current_user is available after authentication
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Get API key from X-API-Key header
+        api_key = request.headers.get('X-API-Key')
+
+        if not api_key:
+            return jsonify({"error": "X-API-Key header missing"}), 401
+
+        # Verify API key and get user
+        user_id = APIKey.get_by_key(api_key)
+        if not user_id:
+            return jsonify({"error": "Invalid or revoked API key"}), 401
+
+        user = User.get_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 401
+
+        # Log in user for this request so current_user is available
+        login_user(user)
+
+        return f(*args, **kwargs)
+
     return decorated_function
 
 

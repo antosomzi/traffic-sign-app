@@ -311,9 +311,10 @@ recording_id/
 
 ## 🔒 Security
 
-- **Authentication**: 
+- **Authentication**:
   - Web interface: Flask-Login with signed session cookies (see **[AUTHENTICATION.md](AUTHENTICATION.md)**)
   - Mobile API: Bearer token authentication with 365-day validity (see **[AUTHENTICATION_MOBILE.md](AUTHENTICATION_MOBILE.md)**)
+  - B2B API: API key authentication via `X-API-Key` header (see **[API_B2B.md](API_B2B.md)**)
 - **Role-based Access Control**: Admin, Organization Owner, and User roles with fine-grained permissions
 - **Multi-tenant Isolation**: Organization-based data segregation
 - **ZipSlip protection**: Validates file paths during extraction

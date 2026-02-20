@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Keys - Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar h1 {
+            font-size: 20px;
+            color: #1f2937;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .navbar-links a {
+            color: #4b5563;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .navbar-links a:hover {
+            background: #f3f4f6;
+            color: #1f2937;
+            text-decoration: none;
+        }
+
+        .navbar-user {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f9f9f9;
+            font-weight: 600;
+            color: #666;
+            font-size: 14px;
+        }
+
+        td {
+            color: #333;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-sm {
+            padding: 4px 12px;
+            font-size: 13px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .api-key-display {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            font-size: 18px;
+            color: #333;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>🚦 Traffic Sign App</h1>
+        <div class="navbar-links">
+            <span class="navbar-user">{{ current_user.organization.name }} • {{ current_user.name }}</span>
+            <a href="{{ url_for('status.list_recordings') }}">Recordings</a>
+            <a href="{{ url_for('map.routes_map') }}">GPS Map</a>
+            {% if current_user.is_org_owner %}
+            <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
+            {% endif %}
+            <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>API Keys Management</h2>
+                <button class="btn btn-primary" onclick="openModal()">+ Generate API Key</button>
+            </div>
+
+            <p style="margin-bottom: 20px; color: #666;">
+                API keys allow B2B users to access the <code>/download/csv-only-range</code> endpoint 
+                without using passwords. Keys should be included in the <code>X-API-Key</code> header.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Organization</th>
+                        <th>Key Name</th>
+                        <th>Created</th>
+                        <th>Expires</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for key in api_keys %}
+                    <tr>
+                        <td>
+                            <strong>{{ key.user_name }}</strong><br>
+                            <small style="color: #666;">{{ key.user_email }}</small>
+                        </td>
+                        <td>{{ key.organization }}</td>
+                        <td>{{ key.name or 'Unnamed Key' }}</td>
+                        <td>{{ key.created_at }}</td>
+                        <td>{{ key.expires_at or 'Never' }}</td>
+                        <td>
+                            {% if key.revoked %}
+                                <span class="badge badge-danger">Revoked</span>
+                            {% elif key.expires_at %}
+                                <span class="badge badge-warning">Expiring</span>
+                            {% else %}
+                                <span class="badge badge-success">Active</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not key.revoked %}
+                            <form action="{{ url_for('admin.revoke_api_key', key_id=key.id) }}" method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Revoke this API key?')">Revoke</button>
+                            </form>
+                            {% endif %}
+                            <form action="{{ url_for('admin.delete_api_key', key_id=key.id) }}" method="POST" style="display: inline;">
+                                <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this API key permanently?')">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: #666; padding: 40px;">
+                            No API keys generated yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>Usage Example</h2>
+            <pre style="background: #f8f9fa; padding: 15px; border-radius: 6px; overflow-x: auto;">
+# Example: Download CSVs for a date range using API key
+
+curl -X GET \
+  "http://your-api.com/download/csv-only-range?start=2024-01-01&end=2024-01-31" \
+  -H "X-API-Key: sk_live_xxxxxxxxxxxxx" \
+  -o recordings_csv.zip
+
+# Python example
+import requests
+
+api_key = "sk_live_xxxxxxxxxxxxx"
+params = {"start": "2024-01-01", "end": "2024-01-31"}
+headers = {"X-API-Key": api_key}
+
+response = requests.get(
+    "http://your-api.com/download/csv-only-range",
+    params=params,
+    headers=headers
+)
+
+with open("recordings_csv.zip", "wb") as f:
+    f.write(response.content)
+            </pre>
+        </div>
+    </div>
+
+    <!-- Generate API Key Modal -->
+    <div id="generateModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Generate API Key</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <form action="{{ url_for('admin.generate_api_key') }}" method="POST">
+                <div class="form-group">
+                    <label for="user_id">User *</label>
+                    <select name="user_id" id="user_id" required>
+                        <option value="">Select a user...</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.name }} ({{ user.email }}) - {{ user.organization.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="name">Key Name (optional)</label>
+                    <input type="text" name="name" id="name" placeholder="e.g., Production API Key">
+                </div>
+                <div class="form-group">
+                    <label for="expires_days">Expiration (optional)</label>
+                    <select name="expires_days" id="expires_days">
+                        <option value="">Never expires</option>
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="180">180 days</option>
+                        <option value="365">1 year</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Generate Key</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('generateModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('generateModal').classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('generateModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

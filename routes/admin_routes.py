@@ -1,10 +1,11 @@
 """Admin routes for managing organizations and users"""
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import admin_required
 from models.organization import Organization
 from models.user import User
+from models.api_key import APIKey
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -246,13 +247,99 @@ def delete_user(user_id):
     if not user:
         flash("User not found.", "danger")
         return redirect(url_for('admin.users'))
-    
+
     # Prevent deleting yourself
     if user.id == current_user.id:
         flash("You cannot delete yourself.", "danger")
         return redirect(url_for('admin.users'))
-    
+
     user_name = user.name
     user.delete()
     flash(f"User '{user_name}' deleted successfully!", "success")
     return redirect(url_for('admin.users'))
+
+
+# API Key Management Routes
+
+@admin_bp.route("/api-keys")
+@admin_required
+def list_api_keys():
+    """List all API keys for all users (admin view)"""
+    users = User.get_all()
+    all_keys = []
+
+    for user in users:
+        keys = APIKey.get_all_for_user(user.id)
+        for key in keys:
+            all_keys.append({
+                "id": key["id"],
+                "user_name": user.name,
+                "user_email": user.email,
+                "organization": user.organization.name,
+                "name": key["name"],
+                "created_at": key["created_at"],
+                "expires_at": key["expires_at"],
+                "revoked": key["revoked"]
+            })
+
+    return render_template("admin/api_keys.html", api_keys=all_keys, users=users)
+
+
+@admin_bp.route("/api-keys/generate", methods=["POST"])
+@admin_required
+def generate_api_key():
+    """Generate a new API key for a user"""
+    user_id = request.form.get("user_id")
+    key_name = request.form.get("name", "").strip()
+    expires_days = request.form.get("expires_days", "").strip()
+
+    if not user_id:
+        flash("User ID is required.", "danger")
+        return redirect(url_for('admin.list_api_keys'))
+
+    user = User.get_by_id(int(user_id))
+    if not user:
+        flash("User not found.", "danger")
+        return redirect(url_for('admin.list_api_keys'))
+
+    # Parse expires_days (None means never expires)
+    expires_days_int = None
+    if expires_days:
+        try:
+            expires_days_int = int(expires_days)
+        except ValueError:
+            flash("Invalid expiration days.", "danger")
+            return redirect(url_for('admin.list_api_keys'))
+
+    # Generate the API key
+    key_id, plain_key = APIKey.create(
+        user_id=int(user_id),
+        name=key_name if key_name else None,
+        expires_days=expires_days_int
+    )
+
+    # Show the key only once!
+    flash(
+        f"API key generated for {user.name}. Copy it now, it won't be shown again: {plain_key}",
+        "success"
+    )
+
+    return redirect(url_for('admin.list_api_keys'))
+
+
+@admin_bp.route("/api-keys/<int:key_id>/revoke", methods=["POST"])
+@admin_required
+def revoke_api_key(key_id):
+    """Revoke an API key"""
+    APIKey.revoke(key_id)
+    flash("API key revoked successfully.", "success")
+    return redirect(url_for('admin.list_api_keys'))
+
+
+@admin_bp.route("/api-keys/<int:key_id>/delete", methods=["POST"])
+@admin_required
+def delete_api_key(key_id):
+    """Delete an API key"""
+    APIKey.delete_by_id(key_id)
+    flash("API key deleted successfully.", "success")
+    return redirect(url_for('admin.list_api_keys'))

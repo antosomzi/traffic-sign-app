@@ -2,6 +2,7 @@
 
 from flask import Blueprint, send_file, abort, request
 from flask_login import login_required, current_user
+from decorators.auth_decorators import api_key_required
 from services.download_service import (
     get_recording_folder,
     get_csv_files,
@@ -73,7 +74,7 @@ def download_csv_only(recording_id):
 
 
 @download_bp.route("/download/csv-only-range", methods=["GET"])
-@login_required
+@api_key_required
 def download_csv_only_range():
     """Download CSVs for all recordings in the current user's organization
     whose recording_date is between `start` and `end` query parameters.
@@ -81,6 +82,10 @@ def download_csv_only_range():
     Query parameters:
         start: ISO date or datetime string (e.g. 2024-01-01 or 2024-01-01T00:00:00)
         end: ISO date or datetime string
+
+    Authentication:
+        Requires X-API-Key header.
+        Example: curl -H "X-API-Key: sk_live_xxx" "https://api.com/download/csv-only-range?start=2024-01-01&end=2024-01-31"
     """
     # Parse query parameters
     start = request.args.get("start")
