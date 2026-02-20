@@ -147,3 +147,22 @@ def create_full_results_zip(
     
     mem_zip.seek(0)
     return mem_zip
+
+
+def create_multi_recordings_csv_zip(recordings_csv_pairs: List[tuple]) -> io.BytesIO:
+    """Create a ZIP file containing CSV results for multiple recordings.
+
+    recordings_csv_pairs: list of tuples (recording_id, supports_csv_path, signs_csv_path)
+    Each recording will be placed in its own folder inside the ZIP to avoid name collisions.
+    """
+    mem_zip = io.BytesIO()
+
+    with zipfile.ZipFile(mem_zip, "w") as zipf:
+        for rec_id, supports_csv, signs_csv in recordings_csv_pairs:
+            if supports_csv and os.path.isfile(supports_csv):
+                zipf.write(supports_csv, arcname=f"{rec_id}/{os.path.basename(supports_csv)}")
+            if signs_csv and os.path.isfile(signs_csv):
+                zipf.write(signs_csv, arcname=f"{rec_id}/{os.path.basename(signs_csv)}")
+
+    mem_zip.seek(0)
+    return mem_zip
