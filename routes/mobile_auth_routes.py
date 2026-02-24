@@ -7,7 +7,8 @@ This file only contains mobile-specific login/logout endpoints
 """
 
 from flask import Blueprint, request, jsonify
-from flask_login import login_required, current_user
+from decorators.auth_decorators import login_required
+from flask_login import current_user
 from models.user import User
 from models.auth_token import AuthToken
 
