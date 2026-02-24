@@ -7,6 +7,7 @@ This file only contains mobile-specific login/logout endpoints
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import login_required, current_user
 from models.user import User
 from models.auth_token import AuthToken
 
@@ -92,8 +93,20 @@ def api_logout():
         return jsonify({"error": "Invalid or expired token"}), 401
     
     AuthToken.delete(token)
-    
+
     return jsonify({"success": True, "message": "Logged out successfully"}), 200
 
 
-
+@api_bp.route("/me", methods=["GET"])
+@login_required
+def get_current_user():
+    """Get current authenticated user info"""
+    return jsonify({
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "organization_id": current_user.organization_id,
+        "organization_name": current_user.organization.name,
+        "is_admin": current_user.is_admin,
+        "is_org_owner": current_user.is_org_owner
+    }), 200
