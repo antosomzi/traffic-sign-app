@@ -148,8 +148,10 @@ def start_and_run_pipeline_ssh(recording_id):
             "sudo docker run --rm --gpus all "
             "-v /home/ec2-user/traffic_sign_pipeline/traffic_sign_pipeline:/usr/src/app "
             f"-v {recording_path}:/data "
-            "-v /home/ec2-user/traffic_sign_pipeline/traffic_sign_pipeline/weights:/usr/src/app/weights "
-            "traffic-pipeline:gpu -i /data > /home/ec2-user/pipeline.log 2>&1"
+            "traffic-pipeline:gpu "
+            "-i /data "
+            "-steps detection small-sign-filter tracking small-track-filter classification frame-gps-coordinates-extraction localization "
+            "-p 1 > /home/ec2-user/pipeline.log 2>&1"
         )
         print(f"[GPU] Running: {docker_cmd}")
         stdin, stdout, stderr = ssh.exec_command(docker_cmd, timeout=7200)
