@@ -7,7 +7,10 @@ Complete guide for using the B2B API to download traffic sign data programmatica
 - [Overview](#overview)
 - [Generating an API Key](#generating-an-api-key)
 - [Managing API Keys](#managing-api-keys)
-- [API Endpoint](#api-endpoint)
+- [CSV Format](#csv-format)
+- [API Endpoints](#api-endpoints)
+  - [Single Recording (Web App)](#1-download-csv-for-a-single-recording-web-app)
+  - [Date Range (B2B API)](#2-download-csvs-by-date-range-b2b-api)
 - [Implementation Examples](#implementation-examples)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
@@ -68,11 +71,38 @@ The API Keys page (`/admin/api-keys`) shows all keys with:
 
 ---
 
-## API Endpoint
+## CSV Format
 
-### Download CSVs by Date Range
+All endpoints return a **single merged CSV** combining signs and supports data.
 
-Downloads CSV results for all recordings within a specified date range.
+**Columns:**
+
+| Column                    | Description                          |
+|---------------------------|--------------------------------------|
+| `ID`                      | Unique sign identifier               |
+| `MUTCD Code`              | MUTCD traffic sign code              |
+| `Position on the Support` | Sign position on the support pole    |
+| `Height (in)`             | Sign height in inches                |
+| `Width (in)`              | Sign width in inches                 |
+| `Longitude`               | GPS longitude (WGS84)                |
+| `Latitude`                | GPS latitude (WGS84)                 |
+
+**Example:**
+```csv
+ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude
+1,R1-1,Top,30,30,-73.985130,40.758896
+2,W3-1,Bottom,24,24,-73.985200,40.758900
+```
+
+---
+
+## API Endpoints
+
+
+
+### 1. Download CSVs by Date Range (B2B API)
+
+Downloads merged CSV results for all recordings within a specified date range. Returns a ZIP where each recording has its own merged CSV file.
 
 **Endpoint:**
 ```
@@ -92,8 +122,16 @@ Header: X-API-Key: sk_live_xxxxxxxxxxxxx
 | `end`     | string | Yes      | End date (ISO format)    | `2024-01-31` |
 
 **Response:**
-- **Success (200)**: ZIP file containing `supports.csv` and `signs.csv` for all matching recordings
+- **Success (200)**: ZIP file containing one merged `signs.csv` per matching recording
 - **Filename format**: `recordings_csv_{start}_{end}.zip`
+- **ZIP structure**:
+  ```
+  recordings_csv_2024-01-01_2024-01-31.zip
+  ├── <recording_id_1>/
+  │   └── signs.csv
+  └── <recording_id_2>/
+      └── signs.csv
+  ```
 
 **Error Codes:**
 
@@ -107,7 +145,7 @@ Header: X-API-Key: sk_live_xxxxxxxxxxxxx
 
 ## Implementation Examples
 
-### cURL
+### cURL – Download by Date Range
 
 ```bash
 curl -X GET \
@@ -116,10 +154,15 @@ curl -X GET \
   -o recordings_january.zip
 ```
 
+The ZIP will contain one `signs.csv` per recording folder, each with columns:
+`ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude`
+
 ### Python - Basic
 
 ```python
 import requests
+import zipfile
+import io
 
 API_KEY = "sk_live_xxxxxxxxxxxxx"
 BASE_URL = "https://your-api.com"
@@ -137,6 +180,11 @@ if response.status_code == 200:
     with open("recordings_january.zip", "wb") as f:
         f.write(response.content)
     print("✅ Download successful!")
+
+    # Inspect the merged CSVs inside the ZIP
+    with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+        for name in z.namelist():
+            print(name)  # e.g. <recording_id>/signs.csv
 else:
     print(f"❌ Error: {response.status_code} - {response.text}")
 ```
@@ -146,12 +194,18 @@ else:
 ```python
 import requests
 import os
+import zipfile
+import io
 
 API_KEY = os.getenv("TRAFFIC_SIGN_API_KEY")
 BASE_URL = "https://your-api.com"
 
 def download_csv_range(start_date, end_date, output_path):
-    """Download CSV results for a date range."""
+    """Download merged CSV results for a date range.
+    
+    Returns a ZIP where each recording folder contains a single signs.csv with columns:
+    ID, MUTCD Code, Position on the Support, Height (in), Width (in), Longitude, Latitude
+    """
     params = {"start": start_date, "end": end_date}
     headers = {"X-API-Key": API_KEY}
     
