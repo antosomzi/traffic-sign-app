@@ -2,6 +2,7 @@
 
 import os
 import io
+import csv
 import zipfile
 from typing import Tuple, List, Optional
 from flask import abort
@@ -108,14 +109,52 @@ def find_video_file(rec_folder: str) -> Optional[str]:
     return None
 
 
+def merge_signs_supports_csv(signs_csv: str, supports_csv: str) -> str:
+    """Merge signs.csv and supports.csv into a single CSV string.
+
+    Joins signs to supports via Foreign Key → support ID to resolve Longitude/Latitude.
+
+    Output format:
+        ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude
+    """
+    # Load support coordinates keyed by ID
+    support_coords = {}
+    if os.path.isfile(supports_csv):
+        with open(supports_csv, "r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                sid = row.get("ID", "").strip()
+                lon = row.get("Longitude", "").strip()
+                lat = row.get("Latitude", "").strip()
+                if sid and lon and lat:
+                    support_coords[sid] = (lon, lat)
+
+    # Build merged rows
+    header = "ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude"
+    rows = [header]
+
+    if os.path.isfile(signs_csv):
+        with open(signs_csv, "r", newline="", encoding="utf-8") as f:
+            for idx, row in enumerate(csv.DictReader(f)):
+                foreign_key = row.get("Foreign Key", "").strip()
+                mutcd = row.get("MUTCD Code", "").strip()
+                position = row.get("Position on the Support", "1").strip()
+                height = row.get("Height (in)", "0").strip()
+                width = row.get("Width (in)", "0").strip()
+
+                lon, lat = support_coords.get(foreign_key, ("", ""))
+                rows.append(f"{idx},{mutcd},{position},{height},{width},{lon},{lat}")
+
+    return "\n".join(rows)
+
+
 def create_csv_only_zip(recording_id: str, supports_csv: str, signs_csv: str) -> io.BytesIO:
-    """Create a ZIP file containing only CSV results."""
+    """Create a ZIP file containing a single merged signs CSV."""
+    merged = merge_signs_supports_csv(signs_csv, supports_csv)
+
     mem_zip = io.BytesIO()
-    
     with zipfile.ZipFile(mem_zip, "w") as zipf:
-        zipf.write(supports_csv, arcname=os.path.basename(supports_csv))
-        zipf.write(signs_csv, arcname=os.path.basename(signs_csv))
-    
+        zipf.writestr("signs.csv", merged)
+
     mem_zip.seek(0)
     return mem_zip
 
@@ -128,13 +167,14 @@ def create_full_results_zip(
     gps_files: List[str],
     video_file: Optional[str]
 ) -> io.BytesIO:
-    """Create a ZIP file containing CSV results, JSON, GPS data, and video."""
+    """Create a ZIP file containing merged CSV, JSON, GPS data, and video."""
+    merged = merge_signs_supports_csv(signs_csv, supports_csv)
+
     mem_zip = io.BytesIO()
     
     with zipfile.ZipFile(mem_zip, "w") as zipf:
-        # Add result CSVs and JSON
-        zipf.write(supports_csv, arcname=os.path.basename(supports_csv))
-        zipf.write(signs_csv, arcname=os.path.basename(signs_csv))
+        # Add merged signs CSV
+        zipf.writestr("signs.csv", merged)
         zipf.write(json_file, arcname=os.path.basename(json_file))
         
         # Add GPS files
@@ -150,19 +190,17 @@ def create_full_results_zip(
 
 
 def create_multi_recordings_csv_zip(recordings_csv_pairs: List[tuple]) -> io.BytesIO:
-    """Create a ZIP file containing CSV results for multiple recordings.
+    """Create a ZIP file containing a single merged signs CSV per recording.
 
     recordings_csv_pairs: list of tuples (recording_id, supports_csv_path, signs_csv_path)
-    Each recording will be placed in its own folder inside the ZIP to avoid name collisions.
+    Each recording will be placed in its own folder inside the ZIP.
     """
     mem_zip = io.BytesIO()
 
     with zipfile.ZipFile(mem_zip, "w") as zipf:
         for rec_id, supports_csv, signs_csv in recordings_csv_pairs:
-            if supports_csv and os.path.isfile(supports_csv):
-                zipf.write(supports_csv, arcname=f"{rec_id}/{os.path.basename(supports_csv)}")
-            if signs_csv and os.path.isfile(signs_csv):
-                zipf.write(signs_csv, arcname=f"{rec_id}/{os.path.basename(signs_csv)}")
+            merged = merge_signs_supports_csv(signs_csv, supports_csv)
+            zipf.writestr(f"{rec_id}/signs.csv", merged)
 
     mem_zip.seek(0)
     return mem_zip
