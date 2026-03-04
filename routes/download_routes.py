@@ -9,7 +9,7 @@ from services.download_service import (
     get_json_file,
     find_gps_files,
     find_video_file,
-    create_csv_only_zip,
+    merge_signs_supports_csv,
     create_full_results_zip,
     create_multi_recordings_csv_zip
 )
@@ -56,7 +56,7 @@ def download_zip(recording_id):
 @download_bp.route("/download/<recording_id>/csv-only", methods=["GET"])
 @login_required
 def download_csv_only(recording_id):
-    """Downloads only the CSV results (supports.csv and signs.csv) in a ZIP file."""
+    """Downloads the merged signs CSV (signs + supports joined) as a single file."""
     # Check if user can access this recording
     if not OrganizationService.can_access_recording(current_user, recording_id):
         abort(403)
@@ -66,11 +66,15 @@ def download_csv_only(recording_id):
     # Get CSV files
     supports_csv, signs_csv = get_csv_files(rec_folder)
     
-    # Create ZIP file with only CSVs
-    zip_filename = f"{recording_id}_results_csv_only.zip"
-    mem_zip = create_csv_only_zip(recording_id, supports_csv, signs_csv)
+    # Merge and return as plain CSV
+    merged = merge_signs_supports_csv(signs_csv, supports_csv)
     
-    return send_file(mem_zip, as_attachment=True, download_name=zip_filename, mimetype="application/zip")
+    from flask import Response
+    return Response(
+        merged,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="signs_{recording_id}.csv"'}
+    )
 
 
 @download_bp.route("/download/csv-only-range", methods=["GET"])
