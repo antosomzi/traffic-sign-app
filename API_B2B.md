@@ -106,7 +106,7 @@ Downloads merged CSV results for all recordings within a specified date range. R
 
 **Endpoint:**
 ```
-GET https://sci.ce.gatech.edu/download/csv-only-range
+GET https://pima.sci.ce.gatech.edu/download/csv-only-range
 
 ```
 
