@@ -475,6 +475,37 @@
             font-size: 13px;
             background: white;
         }
+
+        /* Organization routes layer styles */
+        .org-routes-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .org-routes-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .org-routes-header h6 {
+            margin: 0;
+            font-size: 14px;
+            color: #4b5563;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .org-routes-count-badge {
+            background: #e5e7eb;
+            color: #374151;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -491,8 +522,10 @@
             <a href="{{ url_for('status.list_recordings') }}">Recordings</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            <a href="{{ url_for('org_owner.manage_routes') }}">Org Routes</a>
             {% elif current_user.is_org_owner %}
             <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
+            <a href="{{ url_for('org_owner.manage_routes') }}">Org Routes</a>
             {% endif %}
             <a href="{{ url_for('auth.logout') }}">Logout</a>
         </div>
@@ -557,6 +590,31 @@
                             </select>
                         </div>
                     </div>
+                </div>
+
+                <!-- Organization Routes Section -->
+                <div class="org-routes-section">
+                    <div class="org-routes-header">
+                        <h5>🛣️ Organization Road Network</h5>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <h6>
+                                Road Segments <span class="org-routes-count-badge" id="orgRoutesCountBadge">0</span>
+                            </h6>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 11px; color: #9ca3af; font-style: italic;" id="orgRoutesHint">Show org roads on map</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="orgRoutesToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
+                        Roads owned by your organization are displayed in black.
+                        {% if current_user.is_org_owner or current_user.is_admin %}
+                        <a href="{{ url_for('org_owner.manage_routes') }}" style="color: #3b82f6;">Manage routes →</a>
+                        {% endif %}
+                    </p>
                 </div>
             </div>
 
@@ -747,7 +805,7 @@
             routesLayerGroup.clearLayers();
 
             if (!geojson.features || geojson.features.length === 0) {
-                alert('No routes found for the selected filters.');
+                console.log('No routes found for the selected filters.');
                 return;
             }
 
@@ -1113,10 +1171,130 @@
             loadSigns();
             updateZoomHint();
         });
-        
-        // Auto-load routes on page load
+
+        // ============================================
+        // ORGANIZATION ROUTES LAYER (Road Network)
+        // ============================================
+
+        const orgRoutesLayerGroup = L.layerGroup();
+        var orgRoutesData = null;
+        var orgRoutesVisible = false;
+
+        function loadOrgRoutes() {
+            fetch(`{{ url_for('map.get_org_routes_geojson') }}`)
+                .then(response => {
+                    if (response.status === 404) {
+                        // No routes uploaded – that's fine
+                        document.getElementById('orgRoutesCountBadge').textContent = '0';
+                        document.getElementById('orgRoutesHint').textContent = 'No routes uploaded';
+                        return null;
+                    }
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data) return;
+                    orgRoutesData = data;
+                    const count = data.features ? data.features.length : 0;
+                    document.getElementById('orgRoutesCountBadge').textContent = count;
+                    document.getElementById('orgRoutesHint').textContent = 'Show org roads on map';
+                    displayOrgRoutes();
+
+                    // Auto-enable if URL has ?view=org_routes
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('view') === 'org_routes' && count > 0) {
+                        document.getElementById('orgRoutesToggle').checked = true;
+                        orgRoutesVisible = true;
+                        displayOrgRoutes();
+                        fitToOrgRoutes();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading org routes:', error);
+                });
+        }
+
+        function displayOrgRoutes() {
+            orgRoutesLayerGroup.clearLayers();
+
+            if (!orgRoutesVisible || !orgRoutesData || !orgRoutesData.features) return;
+
+            orgRoutesData.features.forEach(feature => {
+                if (!feature.geometry) return;
+
+                const layer = L.geoJSON({
+                    type: 'Feature',
+                    geometry: feature.geometry,
+                    properties: feature.properties || {}
+                }, {
+                    style: function() {
+                        return {
+                            color: '#1f2937',
+                            weight: 4,
+                            opacity: 0.7,
+                            dashArray: null
+                        };
+                    },
+                    onEachFeature: function(feat, lyr) {
+                        // Build popup from properties
+                        let popupHtml = '<div style="min-width: 120px;"><h6><strong>🛣️ Organization Road</strong></h6>';
+                        const props = feat.properties || {};
+                        for (const [key, value] of Object.entries(props)) {
+                            popupHtml += `<p style="margin: 2px 0; font-size: 12px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(String(value))}</p>`;
+                        }
+                        popupHtml += '</div>';
+                        lyr.bindPopup(popupHtml);
+                    }
+                });
+
+                layer.eachLayer(function(l) {
+                    orgRoutesLayerGroup.addLayer(l);
+                });
+            });
+
+            if (!map.hasLayer(orgRoutesLayerGroup)) {
+                map.addLayer(orgRoutesLayerGroup);
+            }
+        }
+
+        function fitToOrgRoutes() {
+            if (!orgRoutesData || !orgRoutesData.features || orgRoutesData.features.length === 0) return;
+
+            let bounds;
+            for (const feature of orgRoutesData.features) {
+                if (feature.geometry && feature.geometry.coordinates) {
+                    const coords = feature.geometry.coordinates;
+                    if (coords.length > 0) {
+                        const featureBounds = L.latLngBounds(
+                            coords.map(coord => [coord[1], coord[0]])
+                        );
+                        if (!bounds) {
+                            bounds = featureBounds;
+                        } else {
+                            bounds.extend(featureBounds);
+                        }
+                    }
+                }
+            }
+
+            if (bounds && bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+
+        // Toggle handler
+        document.getElementById('orgRoutesToggle').addEventListener('change', function() {
+            orgRoutesVisible = this.checked;
+            if (orgRoutesVisible) {
+                displayOrgRoutes();
+            } else {
+                orgRoutesLayerGroup.clearLayers();
+            }
+        });
+
+        // Load org routes on page load
         window.addEventListener('load', function() {
-            loadRoutes();
+            loadOrgRoutes();
         });
     </script>
 </body>

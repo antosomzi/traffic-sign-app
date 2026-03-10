@@ -194,8 +194,35 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Deployment**: `README.md`, `DEPLOYMENT.md`
 - **GPU configuration**: `pipeline/gpu/config.py`
 - **Post-processing**: `pipeline/post_processing.py` (signs CSV merge after pipeline)
+- **Route filtering**: `services/route_filtering_service.py` (sign filtering by org routes)
 - **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner, map)
-- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization, signs)
+- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization, signs, route_filtering)
 - **Models**: `models/` (user, organization, recording, sign, auth_token, database)
 - **Decorators**: `decorators/auth_decorators.py` for access control
 - **Migrations**: `migrations/` (add_validation_status.py for signs feature, generate_merged_signs.py for CSV merge)
+
+## Organization Routes & Sign Filtering
+
+**Route Filtering Module** (`services/route_filtering_service.py`):
+- Triggered automatically after `generate_merged_signs_csv()` in the Celery pipeline
+- Loads org routes GeoJSON from `org_routes/<org_id>/routes.geojson`
+- Creates 50m buffer around all route LineStrings (UTM projection for accuracy)
+- Filters `signs_merged.csv` → outputs `signs_merged_filtered.csv` in same folder
+- If no org routes exist, filtering is skipped (no-op) and unfiltered CSV is used
+- Dependencies: `geopandas`, `shapely`, `pyproj` (imported lazily, fails gracefully)
+
+**Org Routes Storage**:
+- GeoJSON files stored at `<BASE_PATH>/org_routes/<org_id>/routes.geojson`
+- Organization model methods: `has_routes()`, `save_routes_geojson()`, `load_routes_geojson()`, `delete_routes_geojson()`
+- Upload via `POST /org_owner/routes/upload` (org_owner or admin only)
+- Management UI at `/org_owner/routes` (template: `templates/org_owner/routes.html`)
+
+**CSV Priority** (consumers prefer filtered when available):
+- `get_best_signs_csv_path()` → returns `signs_merged_filtered.csv` if exists, else `signs_merged.csv`
+- Used by: `signs_service.parse_signs_csv()`, `download_service.get_merged_signs_content()`
+
+**Map Visualization**:
+- API endpoint: `GET /map/api/org_routes` returns org routes GeoJSON
+- Toggle on map: "Organization Road Network" layer (black lines, weight 4)
+- Separate from GPS recording traces and sign markers
+- URL param `?view=org_routes` auto-enables the layer and fits bounds

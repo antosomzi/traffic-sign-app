@@ -224,8 +224,10 @@
             <a href="{{ url_for('map.routes_map') }}">GPS Map</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('org_owner.manage_routes') }}">Org Routes</a>
             {% elif current_user.is_org_owner %}
             <a href="{{ url_for('org_owner.list_users') }}">Manage Users</a>
+            <a href="{{ url_for('org_owner.manage_routes') }}">Org Routes</a>
             {% endif %}
             <a href="{{ url_for('auth.logout') }}">Logout</a>
         </div>

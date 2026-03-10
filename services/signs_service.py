@@ -5,12 +5,15 @@ import csv
 from models.sign import Sign
 from config import Config
 from pipeline.post_processing import get_merged_signs_csv_path
+from services.route_filtering_service import get_best_signs_csv_path
 
 
 def parse_signs_csv(recording_id):
     """
-    Parse ``result_pipeline_stable/signs_merged.csv`` to extract sign data
-    for DB import.
+    Parse the best available signs CSV to extract sign data for DB import.
+
+    Prefers ``signs_merged_filtered.csv`` (route-filtered) when it exists,
+    and falls back to ``signs_merged.csv``.
 
     Merged CSV columns:
         ID, MUTCD Code, Position on the Support, Height (in), Width (in), Longitude, Latitude
@@ -22,16 +25,17 @@ def parse_signs_csv(recording_id):
         List of tuples (recording_id, mutcd_code, latitude, longitude)
     """
     rec_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
-    merged_path = get_merged_signs_csv_path(rec_path)
+    csv_path = get_best_signs_csv_path(rec_path)
 
-    if not merged_path:
-        print(f"signs_merged.csv not found for {recording_id}")
+    if not csv_path:
+        print(f"No signs CSV found for {recording_id}")
         return []
 
+    print(f"[SIGNS] Using signs CSV: {os.path.basename(csv_path)}")
     signs_data = []
 
     try:
-        with open(merged_path, 'r', newline='', encoding='utf-8') as f:
+        with open(csv_path, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 try:

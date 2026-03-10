@@ -41,6 +41,7 @@ uploads/
 recordings/
 temp_extracts/
 result_pipeline_stable/
+org_routes/
 
 # Database
 *.db

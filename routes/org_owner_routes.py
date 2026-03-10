@@ -1,6 +1,7 @@
 """Routes for organization owners to manage users in their organization"""
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+import json
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import org_owner_required
 from models.user import User
@@ -190,3 +191,96 @@ def reset_password(user_id):
         return redirect(url_for('org_owner.list_users'))
     
     return render_template('org_owner/reset_password.html', user=user)
+
+
+# -----------------------------------------------------------------
+# Organization Routes GeoJSON Upload
+# -----------------------------------------------------------------
+
+@org_owner_bp.route('/routes', methods=['GET'])
+@org_owner_required
+def manage_routes():
+    """Display the routes management page"""
+    org = Organization.get_by_id(current_user.organization_id)
+    return render_template(
+        'org_owner/routes.html',
+        organization=org,
+        has_routes=org.has_routes() if org else False
+    )
+
+
+@org_owner_bp.route('/routes/upload', methods=['POST'])
+@org_owner_required
+def upload_routes():
+    """Upload a GeoJSON file containing organisation routes"""
+    org = Organization.get_by_id(current_user.organization_id)
+    if not org:
+        flash('Organization not found', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Check that a file was submitted
+    if 'geojson_file' not in request.files:
+        flash('No file selected', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    file = request.files['geojson_file']
+    if file.filename == '':
+        flash('No file selected', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Validate file extension
+    if not file.filename.lower().endswith(('.geojson', '.json')):
+        flash('Invalid file type. Please upload a .geojson or .json file.', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Read and validate JSON content
+    try:
+        content = file.read().decode('utf-8')
+        data = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        flash(f'Invalid JSON file: {e}', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Validate GeoJSON structure
+    if data.get('type') != 'FeatureCollection':
+        flash('Invalid GeoJSON: must be a FeatureCollection', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    features = data.get('features', [])
+    if not features:
+        flash('GeoJSON contains no features', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Check that features contain LineString geometries
+    line_count = 0
+    for feat in features:
+        geom_type = feat.get('geometry', {}).get('type', '')
+        if geom_type in ('LineString', 'MultiLineString'):
+            line_count += 1
+
+    if line_count == 0:
+        flash('GeoJSON contains no LineString features (road segments)', 'danger')
+        return redirect(url_for('org_owner.manage_routes'))
+
+    # Save the file
+    try:
+        org.save_routes_geojson(content)
+        flash(
+            f'Routes uploaded successfully! {line_count} road segments loaded.',
+            'success'
+        )
+    except Exception as e:
+        flash(f'Error saving routes: {e}', 'danger')
+
+    return redirect(url_for('org_owner.manage_routes'))
+
+
+@org_owner_bp.route('/routes/delete', methods=['POST'])
+@org_owner_required
+def delete_routes():
+    """Delete the organisation's routes GeoJSON file"""
+    org = Organization.get_by_id(current_user.organization_id)
+    if org:
+        org.delete_routes_geojson()
+        flash('Routes deleted successfully', 'success')
+    return redirect(url_for('org_owner.manage_routes'))

@@ -7,6 +7,7 @@ from typing import List, Optional
 from flask import abort
 from config import Config
 from pipeline.post_processing import get_merged_signs_csv_path
+from services.route_filtering_service import get_best_signs_csv_path
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -21,19 +22,16 @@ def get_recording_folder(recording_id: str) -> str:
 
 
 def get_merged_signs_content(rec_folder: str) -> str:
-    """Return the merged signs CSV content for a recording.
+    """Return the best available signs CSV content for a recording.
 
-    Reads the pre-merged ``signs_merged.csv`` generated at the end of the
-    pipeline (see ``pipeline/post_processing.py``).
-
-    If the file is missing, run the migration script first:
-        python migrations/generate_merged_signs.py
+    Prefers ``signs_merged_filtered.csv`` (route-filtered) when it exists,
+    and falls back to ``signs_merged.csv``.
     """
-    merged_path = get_merged_signs_csv_path(rec_folder)
-    if not merged_path:
+    best_path = get_best_signs_csv_path(rec_folder)
+    if not best_path:
         abort(404, description="signs_merged.csv not found. Run: python migrations/generate_merged_signs.py")
 
-    with open(merged_path, "r", encoding="utf-8") as f:
+    with open(best_path, "r", encoding="utf-8") as f:
         return f.read()
 
 

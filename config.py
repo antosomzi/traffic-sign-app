@@ -23,6 +23,7 @@ class Config:
     UPLOAD_FOLDER = os.path.join(BASE_PATH, "uploads")
     EXTRACT_FOLDER = os.path.join(BASE_PATH, "recordings")
     TEMP_EXTRACT_FOLDER = os.path.join(BASE_PATH, "temp_extracts")
+    ORG_ROUTES_FOLDER = os.path.join(BASE_PATH, "org_routes")
     
     # File upload settings
     ALLOWED_EXTENSIONS = {"zip", "tar", "tar.gz", "tgz"}

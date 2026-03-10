@@ -156,3 +156,30 @@ def get_signs_filter_options():
     except Exception as e:
         print(f"Error in get_signs_filter_options: {e}")
         return jsonify({"error": "Failed to retrieve filter options", "message": str(e)}), 500
+
+
+@map_bp.route('/api/org_routes', methods=['GET'])
+@login_required
+def get_org_routes_geojson():
+    """
+    API endpoint to get the organization's uploaded routes GeoJSON.
+    This is the road network uploaded by the org owner, NOT the GPS traces.
+
+    Returns:
+        GeoJSON FeatureCollection with the org's road segments,
+        or 404 if no routes have been uploaded.
+    """
+    try:
+        org = Organization.get_by_id(current_user.organization_id)
+        if not org:
+            return jsonify({"error": "Organization not found"}), 404
+
+        geojson = org.load_routes_geojson()
+        if geojson is None:
+            return jsonify({"error": "No routes uploaded for this organization"}), 404
+
+        return jsonify(geojson), 200
+
+    except Exception as e:
+        print(f"Error in get_org_routes_geojson: {e}")
+        return jsonify({"error": "Failed to retrieve org routes", "message": str(e)}), 500
