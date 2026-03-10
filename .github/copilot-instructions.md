@@ -33,8 +33,14 @@
 ## Data Flow
 
 1. **Upload** → Flask validates ZIP structure → Extracts to temp → Videos uploaded to S3 → Validates folder hierarchy → Moves atomically to `recordings/<recording_id>/`
-2. **Processing** → Celery task queued → Downloads video from S3 → Runs 8-stage ML pipeline (`s0_detection` through `s7_export_csv`) → Deletes local video
-3. **Results** → Downloads available at `/download/<recording_id>` (downloads video from S3, bundles with CSVs, returns ZIP with `supports.csv` and `signs.csv`)
+2. **Processing** → Celery task queued → Downloads video from S3 → Runs 8-stage ML pipeline (`s0_detection` through `s7_export_csv`) → Post-processing merges `signs.csv` + `supports.csv` → Writes `result_pipeline_stable/signs_merged.csv` → Deletes local video
+3. **Results** → Downloads available at `/download/<recording_id>` (downloads video from S3, bundles with merged CSV, returns ZIP)
+
+**Merged Signs CSV** (`pipeline/post_processing.py`):
+- After pipeline completes, `generate_merged_signs_csv()` joins `s7_export_csv/signs.csv` (sign details) with `supports.csv` (GPS coordinates via Foreign Key) into a single `result_pipeline_stable/signs_merged.csv`
+- Format: `ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude`
+- All consumers (download, map, DB import) read this single file — no runtime merge needed
+- Migration for existing recordings: `python migrations/generate_merged_signs.py` (supports `--dry-run`, idempotent)
 
 **S3 Video Storage** (`S3_STORAGE.md`):
 - Videos stored at `s3://traffic-sign-videos/videos/{prod|local}/<recording_id>/<video>.mp4`
@@ -107,7 +113,7 @@ python app.py  # Dev mode (single worker, auto-reload)
 **Signs Model** (`models/sign.py`):
 - Table: `signs` with columns: `id`, `recording_id`, `mutcd_code`, `latitude`, `longitude`, `created_at`
 - Foreign key to `recordings` with CASCADE delete
-- Bulk import from `result_pipeline_stable/s7_export_csv/signs.csv` on validation
+- Bulk import from `result_pipeline_stable/signs_merged.csv` on validation
 
 **Validation Flow**:
 1. User clicks "Validate" button on completed recording card (`/status` page)
@@ -187,8 +193,9 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Status Systems**: `JOB_QUEUE_STATUS.md` (Redis job tracking), `STATUS_POLLING.md` (frontend polling)
 - **Deployment**: `README.md`, `DEPLOYMENT.md`
 - **GPU configuration**: `pipeline/gpu/config.py`
+- **Post-processing**: `pipeline/post_processing.py` (signs CSV merge after pipeline)
 - **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner, map)
 - **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization, signs)
 - **Models**: `models/` (user, organization, recording, sign, auth_token, database)
 - **Decorators**: `decorators/auth_decorators.py` for access control
-- **Migrations**: `migrations/` (add_validation_status.py for signs feature)
+- **Migrations**: `migrations/` (add_validation_status.py for signs feature, generate_merged_signs.py for CSV merge)

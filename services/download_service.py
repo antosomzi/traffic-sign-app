@@ -2,11 +2,11 @@
 
 import os
 import io
-import csv
 import zipfile
-from typing import Tuple, List, Optional
+from typing import List, Optional
 from flask import abort
 from config import Config
+from pipeline.post_processing import get_merged_signs_csv_path
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -20,26 +20,21 @@ def get_recording_folder(recording_id: str) -> str:
     return rec_folder
 
 
-def get_csv_files(rec_folder: str) -> Tuple[str, str]:
-    """Get paths to CSV result files and validate they exist."""
-    result_folder = os.path.join(rec_folder, "result_pipeline_stable", "s7_export_csv")
-    
-    if not os.path.isdir(result_folder):
-        abort(404, description="Results folder not found")
-    
-    supports_csv = os.path.join(result_folder, "supports.csv")
-    signs_csv = os.path.join(result_folder, "signs.csv")
-    
-    missing = []
-    if not os.path.isfile(supports_csv):
-        missing.append("supports.csv")
-    if not os.path.isfile(signs_csv):
-        missing.append("signs.csv")
-    
-    if missing:
-        abort(404, description=f"Missing CSV files: {', '.join(missing)}")
-    
-    return supports_csv, signs_csv
+def get_merged_signs_content(rec_folder: str) -> str:
+    """Return the merged signs CSV content for a recording.
+
+    Reads the pre-merged ``signs_merged.csv`` generated at the end of the
+    pipeline (see ``pipeline/post_processing.py``).
+
+    If the file is missing, run the migration script first:
+        python migrations/generate_merged_signs.py
+    """
+    merged_path = get_merged_signs_csv_path(rec_folder)
+    if not merged_path:
+        abort(404, description="signs_merged.csv not found. Run: python migrations/generate_merged_signs.py")
+
+    with open(merged_path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
 def get_json_file(rec_folder: str) -> str:
@@ -109,47 +104,9 @@ def find_video_file(rec_folder: str) -> Optional[str]:
     return None
 
 
-def merge_signs_supports_csv(signs_csv: str, supports_csv: str) -> str:
-    """Merge signs.csv and supports.csv into a single CSV string.
-
-    Joins signs to supports via Foreign Key → support ID to resolve Longitude/Latitude.
-
-    Output format:
-        ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude
-    """
-    # Load support coordinates keyed by ID
-    support_coords = {}
-    if os.path.isfile(supports_csv):
-        with open(supports_csv, "r", newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                sid = row.get("ID", "").strip()
-                lon = row.get("Longitude", "").strip()
-                lat = row.get("Latitude", "").strip()
-                if sid and lon and lat:
-                    support_coords[sid] = (lon, lat)
-
-    # Build merged rows
-    header = "ID,MUTCD Code,Position on the Support,Height (in),Width (in),Longitude,Latitude"
-    rows = [header]
-
-    if os.path.isfile(signs_csv):
-        with open(signs_csv, "r", newline="", encoding="utf-8") as f:
-            for idx, row in enumerate(csv.DictReader(f)):
-                foreign_key = row.get("Foreign Key", "").strip()
-                mutcd = row.get("MUTCD Code", "").strip()
-                position = row.get("Position on the Support", "1").strip()
-                height = row.get("Height (in)", "0").strip()
-                width = row.get("Width (in)", "0").strip()
-
-                lon, lat = support_coords.get(foreign_key, ("", ""))
-                rows.append(f"{idx},{mutcd},{position},{height},{width},{lon},{lat}")
-
-    return "\n".join(rows)
-
-
-def create_csv_only_zip(recording_id: str, supports_csv: str, signs_csv: str) -> io.BytesIO:
+def create_csv_only_zip(recording_id: str, rec_folder: str) -> io.BytesIO:
     """Create a ZIP file containing a single merged signs CSV."""
-    merged = merge_signs_supports_csv(signs_csv, supports_csv)
+    merged = get_merged_signs_content(rec_folder)
 
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, "w") as zipf:
@@ -161,14 +118,13 @@ def create_csv_only_zip(recording_id: str, supports_csv: str, signs_csv: str) ->
 
 def create_full_results_zip(
     recording_id: str,
-    supports_csv: str,
-    signs_csv: str,
+    rec_folder: str,
     json_file: str,
     gps_files: List[str],
     video_file: Optional[str]
 ) -> io.BytesIO:
     """Create a ZIP file containing merged CSV, JSON, GPS data, and video."""
-    merged = merge_signs_supports_csv(signs_csv, supports_csv)
+    merged = get_merged_signs_content(rec_folder)
 
     mem_zip = io.BytesIO()
     
@@ -189,17 +145,17 @@ def create_full_results_zip(
     return mem_zip
 
 
-def create_multi_recordings_csv_zip(recordings_csv_pairs: List[tuple]) -> io.BytesIO:
+def create_multi_recordings_csv_zip(recordings_folders: List[tuple]) -> io.BytesIO:
     """Create a ZIP file containing a single merged signs CSV per recording.
 
-    recordings_csv_pairs: list of tuples (recording_id, supports_csv_path, signs_csv_path)
+    recordings_folders: list of tuples (recording_id, rec_folder_path)
     Each recording will be placed in its own folder inside the ZIP.
     """
     mem_zip = io.BytesIO()
 
     with zipfile.ZipFile(mem_zip, "w") as zipf:
-        for rec_id, supports_csv, signs_csv in recordings_csv_pairs:
-            merged = merge_signs_supports_csv(signs_csv, supports_csv)
+        for rec_id, rec_folder in recordings_folders:
+            merged = get_merged_signs_content(rec_folder)
             zipf.writestr(f"{rec_id}/signs.csv", merged)
 
     mem_zip.seek(0)

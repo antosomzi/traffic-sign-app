@@ -42,14 +42,19 @@ for STEP in "${STEPS[@]}"; do
     
     # Créer le fichier de sortie approprié
     if [ "$STEP" == "s7_export_csv" ]; then
-        # Dernière étape: créer les CSV finaux
-        echo "frame_id,sign_type,confidence,x,y,width,height" > "$STEP_PATH/supports.csv"
-        echo "1,STOP,0.95,100,200,50,50" >> "$STEP_PATH/supports.csv"
-        echo "2,YIELD,0.92,150,250,45,45" >> "$STEP_PATH/supports.csv"
+        # Dernière étape: créer les CSV finaux (format réaliste identique à la vraie pipeline)
+        # supports.csv – one row per physical support pole
+        echo "ID,Mounting Height,Longitude,Latitude" > "$STEP_PATH/supports.csv"
+        echo "0,84.0,-110.84433348073429,32.30694008810992" >> "$STEP_PATH/supports.csv"
+        echo "1,96.0,-110.84460729972315,32.307264014526766" >> "$STEP_PATH/supports.csv"
+        echo "2,72.0,-110.84512003451280,32.307842095123445" >> "$STEP_PATH/supports.csv"
         
-        echo "sign_id,class,latitude,longitude" > "$STEP_PATH/signs.csv"
-        echo "1,STOP,48.8566,2.3522" >> "$STEP_PATH/signs.csv"
-        echo "2,YIELD,48.8567,2.3523" >> "$STEP_PATH/signs.csv"
+        # signs.csv – one row per sign; Foreign Key → support ID
+        echo "ID,Foreign Key,MUTCD Code,Position on the Support,Height (in),Width (in)" > "$STEP_PATH/signs.csv"
+        echo "0,0,R1-1,1,30,30" >> "$STEP_PATH/signs.csv"
+        echo "1,1,R2-1,1,36,36" >> "$STEP_PATH/signs.csv"
+        echo "2,1,W3-1,2,30,30" >> "$STEP_PATH/signs.csv"
+        echo "3,2,R1-2,1,24,24" >> "$STEP_PATH/signs.csv"
         
         echo "✓ Fichiers CSV créés"
     else

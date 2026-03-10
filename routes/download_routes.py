@@ -5,11 +5,10 @@ from flask_login import login_required, current_user
 from decorators.auth_decorators import api_key_required
 from services.download_service import (
     get_recording_folder,
-    get_csv_files,
     get_json_file,
     find_gps_files,
     find_video_file,
-    merge_signs_supports_csv,
+    get_merged_signs_content,
     create_full_results_zip,
     create_multi_recordings_csv_zip
 )
@@ -29,9 +28,6 @@ def download_zip(recording_id):
     # Get and validate recording folder
     rec_folder = get_recording_folder(recording_id)
     
-    # Get CSV files
-    supports_csv, signs_csv = get_csv_files(rec_folder)
-    
     # Get JSON file
     json_file = get_json_file(rec_folder)
     
@@ -39,12 +35,11 @@ def download_zip(recording_id):
     gps_files = find_gps_files(rec_folder)
     video_file = find_video_file(rec_folder)
     
-    # Create ZIP file
+    # Create ZIP file (uses pre-merged signs_merged.csv or falls back to runtime merge)
     zip_filename = f"{recording_id}_results.zip"
     mem_zip = create_full_results_zip(
         recording_id,
-        supports_csv,
-        signs_csv,
+        rec_folder,
         json_file,
         gps_files,
         video_file
@@ -63,11 +58,8 @@ def download_csv_only(recording_id):
     # Get and validate recording folder
     rec_folder = get_recording_folder(recording_id)
     
-    # Get CSV files
-    supports_csv, signs_csv = get_csv_files(rec_folder)
-    
-    # Merge and return as plain CSV
-    merged = merge_signs_supports_csv(signs_csv, supports_csv)
+    # Read pre-merged CSV (or merge at runtime for legacy recordings)
+    merged = get_merged_signs_content(rec_folder)
     
     from flask import Response
     return Response(
@@ -126,11 +118,10 @@ def download_csv_only_range():
         if not rec.recording_date:
             continue
         if start_dt <= rec.recording_date <= end_dt:
-            # Ensure folder and CSVs exist; get_recording_folder/get_csv_files will abort with 404 if missing
+            # Ensure folder exists; get_recording_folder will abort with 404 if missing
             try:
                 rec_folder = get_recording_folder(rec.id)
-                supports_csv, signs_csv = get_csv_files(rec_folder)
-                matched.append((rec.id, supports_csv, signs_csv))
+                matched.append((rec.id, rec_folder))
             except Exception:
                 # Skip recordings that lack results instead of failing the whole batch
                 continue

@@ -4,112 +4,56 @@ import os
 import csv
 from models.sign import Sign
 from config import Config
-
-
-def _load_supports_coordinates(supports_csv_path):
-    """
-    Load support coordinates from supports.csv.
-    
-    Returns:
-        Dict mapping support ID to (latitude, longitude)
-    """
-    coordinates = {}
-    
-    if not os.path.isfile(supports_csv_path):
-        return coordinates
-    
-    try:
-        with open(supports_csv_path, 'r', newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    support_id = row.get('ID', '').strip()
-                    lat_str = row.get('Latitude', '')
-                    lon_str = row.get('Longitude', '')
-                    
-                    if support_id and lat_str and lon_str:
-                        latitude = float(lat_str)
-                        longitude = float(lon_str)
-                        
-                        # Validate coordinates
-                        if (-90 <= latitude <= 90) and (-180 <= longitude <= 180):
-                            coordinates[support_id] = (latitude, longitude)
-                except (ValueError, KeyError):
-                    continue
-    except Exception as e:
-        print(f"Error loading supports: {e}")
-    
-    return coordinates
+from pipeline.post_processing import get_merged_signs_csv_path
 
 
 def parse_signs_csv(recording_id):
     """
-    Parse signs.csv and join with supports.csv to get coordinates.
-    
-    signs.csv has: ID, Foreign Key, MUTCD Code, ...
-    supports.csv has: ID, Mounting Height, Longitude, Latitude
-    
-    Join on: signs['Foreign Key'] = supports['ID']
-    
+    Parse ``result_pipeline_stable/signs_merged.csv`` to extract sign data
+    for DB import.
+
+    Merged CSV columns:
+        ID, MUTCD Code, Position on the Support, Height (in), Width (in), Longitude, Latitude
+
     Args:
         recording_id: The recording ID to parse signs for
-        
+
     Returns:
         List of tuples (recording_id, mutcd_code, latitude, longitude)
     """
-    base_path = os.path.join(
-        Config.EXTRACT_FOLDER,
-        recording_id,
-        "result_pipeline_stable",
-        "s7_export_csv"
-    )
-    
-    signs_csv_path = os.path.join(base_path, "signs.csv")
-    supports_csv_path = os.path.join(base_path, "supports.csv")
-    
-    if not os.path.isfile(signs_csv_path):
-        print(f"Signs CSV not found: {signs_csv_path}")
+    rec_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
+    merged_path = get_merged_signs_csv_path(rec_path)
+
+    if not merged_path:
+        print(f"signs_merged.csv not found for {recording_id}")
         return []
-    
-    if not os.path.isfile(supports_csv_path):
-        print(f"Supports CSV not found: {supports_csv_path}")
-        return []
-    
-    # Load support coordinates first
-    support_coords = _load_supports_coordinates(supports_csv_path)
-    if not support_coords:
-        print(f"No valid coordinates found in supports.csv")
-        return []
-    
+
     signs_data = []
-    
+
     try:
-        with open(signs_csv_path, 'r', newline='', encoding='utf-8') as f:
+        with open(merged_path, 'r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            
             for row in reader:
                 try:
                     mutcd_code = row.get('MUTCD Code', '').strip()
-                    foreign_key = row.get('Foreign Key', '').strip()
-                    
-                    if not mutcd_code or not foreign_key:
+                    lat_str = row.get('Latitude', '').strip()
+                    lon_str = row.get('Longitude', '').strip()
+
+                    if not mutcd_code or not lat_str or not lon_str:
                         continue
-                    
-                    # Look up coordinates from supports
-                    coords = support_coords.get(foreign_key)
-                    if not coords:
-                        continue
-                    
-                    latitude, longitude = coords
-                    signs_data.append((recording_id, mutcd_code, latitude, longitude))
-                    
+
+                    latitude = float(lat_str)
+                    longitude = float(lon_str)
+
+                    # Validate coordinates
+                    if (-90 <= latitude <= 90) and (-180 <= longitude <= 180):
+                        signs_data.append((recording_id, mutcd_code, latitude, longitude))
                 except (ValueError, KeyError):
                     continue
-                    
     except Exception as e:
-        print(f"Error parsing signs CSV: {e}")
+        print(f"Error parsing signs_merged.csv: {e}")
         return []
-    
+
     print(f"Parsed {len(signs_data)} signs for recording {recording_id}")
     return signs_data
 
