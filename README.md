@@ -105,6 +105,17 @@ For detailed deployment, Nginx configuration, and SSL setup, see **[DEPLOYMENT.m
 
 For detailed documentation on the GPS Routes feature, see **[GPS_ROUTES_MAP.md](GPS_ROUTES_MAP.md)**.
 
+### Organization Route Filtering 🛣️
+- **GeoJSON Upload**: Org owners/admins upload their road network as a GeoJSON file (`LineString`/`MultiLineString`)
+- **Automatic Sign Filtering**: After pipeline completion, detected signs are filtered to only keep those within 50m of org routes
+- **Pipeline Integration**: Runs automatically after `signs_merged.csv` is generated → outputs `signs_merged_filtered.csv`
+- **Fallback**: If no routes are uploaded, all signs are kept (unfiltered)
+- **Map Layer**: Org routes displayed as a black overlay on the GPS map (toggle on/off)
+- **Storage**: GeoJSON files stored on disk at `org_routes/<org_id>/routes.geojson`
+- **Dependencies**: `geopandas`, `shapely`, `pyproj`
+
+**Access**: `/org_owner/routes` (org owners and admins only)
+
 ## ✨ FLow
 
 1. User uploads file → extraction job starts (tracked by `job_id`)
@@ -145,7 +156,8 @@ app/
 │   ├── redis_service.py       # Redis operations
 │   ├── validation_service.py  # Structure validation
 │   ├── extraction_service.py  # ZIP extraction logic
-│   └── s3_service.py          # S3 video storage operations
+│   ├── s3_service.py          # S3 video storage operations
+│   └── route_filtering_service.py # Org route filtering (50m buffer)
 ├── migrations/                 # Database and data migrations
 │   └── migrate_videos_to_s3.py # Migrate existing videos to S3
 ├── utils/                      # Utility functions
@@ -171,6 +183,9 @@ app/
 │       ├── status.json   # Processing status tracking
 │       ├── result_pipeline_stable/  # ML pipeline outputs
 │       └── <device_id>/  # Original recording data
+├── org_routes/           # Organization road network GeoJSON files
+│   └── <org_id>/
+│       └── routes.geojson
 ├── temp_extracts/        # Temporary extraction during validation
 │   └── <job_id>/         # Cleaned up after validation
 └── app/                  # Application files
@@ -181,6 +196,7 @@ app/
 app/
 ├── uploads/              # Uploaded ZIP files
 ├── recordings/           # Validated recordings
+├── org_routes/           # Organization route GeoJSON files
 └── temp_extracts/        # Temporary extraction
 ```
 
