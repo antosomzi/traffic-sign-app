@@ -6,6 +6,7 @@ from decorators.auth_decorators import admin_required
 from models.organization import Organization
 from models.user import User
 from models.api_key import APIKey
+from services.redis_service import RedisProgressService
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -21,14 +22,29 @@ def dashboard():
     total_orgs = len(organizations)
     total_users = len(users)
     total_recordings = sum(org.count_recordings() for org in organizations)
+
+    maintenance_mode = RedisProgressService.get_maintenance_mode()
     
     return render_template(
         "admin/dashboard.html",
         total_orgs=total_orgs,
         total_users=total_users,
         total_recordings=total_recordings,
-        organizations=organizations
+        organizations=organizations,
+        maintenance_mode=maintenance_mode
     )
+
+@admin_bp.route("/toggle_maintenance", methods=["POST"])
+@admin_required
+def toggle_maintenance():
+    """Toggle system maintenance mode"""
+    current_state = RedisProgressService.get_maintenance_mode()
+    new_state = not current_state
+    RedisProgressService.set_maintenance_mode(new_state)
+    
+    action = "enabled" if new_state else "disabled"
+    flash(f"System maintenance mode has been {action}.", "success" if not new_state else "warning")
+    return redirect(url_for('admin.dashboard'))
 
 
 @admin_bp.route("/organizations")

@@ -31,3 +31,17 @@ class RedisProgressService:
         if prog:
             prog.update(kwargs)
             RedisProgressService.set_extraction_progress(job_id, prog)
+
+    @staticmethod
+    def get_maintenance_mode() -> bool:
+        """Check if system is in maintenance mode."""
+        return redis_client.get("system:maintenance") == b"1"
+
+    @staticmethod
+    def set_maintenance_mode(active: bool):
+        """Enable or disable system maintenance mode."""
+        if active:
+            redis_client.set("system:maintenance", "1")
+        else:
+            redis_client.delete("system:maintenance")
+

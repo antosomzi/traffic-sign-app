@@ -79,7 +79,15 @@ def create_app(config_class=Config):
     @app.route("/")
     def index():
         return redirect(url_for('status.list_recordings'))
-    
+
+    # Context processor for global variables
+    @app.context_processor
+    def inject_global_vars():
+        from services.redis_service import RedisProgressService
+        return {
+            'system_maintenance_active': RedisProgressService.get_maintenance_mode()
+        }
+
     # Add security headers
     @app.after_request
     def add_security_headers(response):
