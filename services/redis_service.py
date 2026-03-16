@@ -35,7 +35,8 @@ class RedisProgressService:
     @staticmethod
     def get_maintenance_mode() -> bool:
         """Check if system is in maintenance mode."""
-        return redis_client.get("system:maintenance") == b"1"
+        val = redis_client.get("system:maintenance")
+        return val == "1" or val == b"1"
 
     @staticmethod
     def set_maintenance_mode(active: bool):
