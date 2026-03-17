@@ -164,6 +164,13 @@ def start_and_run_pipeline_ssh(recording_id):
         exit_code = stdout.channel.recv_exit_status()
         elapsed = int(time.time() - start_time)
 
+        # Fix permissions so Celery worker on main node can write the post-processing CSVs
+        chown_cmd = f"sudo chown -R ec2-user:ec2-user {recording_path}"
+        print(f"[GPU] Fixing permissions: {chown_cmd}")
+        _, chown_stdout, _ = ssh.exec_command(chown_cmd)
+        chown_stdout.channel.recv_exit_status() # Wait for chown to finish
+        time.sleep(1) # Give EFS a second to propagate the ownership change
+
         if exit_code != 0:
             error_stderr = stderr.read().decode()
             print(f"❌ Pipeline failed (exit {exit_code})")
