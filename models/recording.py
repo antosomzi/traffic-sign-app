@@ -49,10 +49,11 @@ def parse_db_datetime(value):
 class Recording:
     """Recording entity linking recording_id to organization and user"""
     
-    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None):
+    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None):
         self.id = id  # recording_id (e.g., "2024_05_20_23_32_53_415")
         self.organization_id = organization_id
         self.user_id = user_id
+        self.note = note
         # Parse dates from strings if needed
         self.upload_date = parse_db_datetime(upload_date)
         self.recording_date = parse_db_datetime(recording_date)
@@ -91,7 +92,7 @@ class Recording:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """SELECT id, organization_id, user_id, upload_date, recording_date 
+                """SELECT id, organization_id, user_id, upload_date, recording_date, note 
                    FROM recordings WHERE id = ?""",
                 (recording_id,)
             )
@@ -103,7 +104,8 @@ class Recording:
                 organization_id=row['organization_id'],
                 user_id=row['user_id'],
                 upload_date=row['upload_date'],
-                recording_date=row['recording_date']
+                recording_date=row['recording_date'],
+                note=row['note']
             )
         return None
     
@@ -133,7 +135,7 @@ class Recording:
             
             # Build query
             query = f"""
-                SELECT id, organization_id, user_id, upload_date, recording_date 
+                SELECT id, organization_id, user_id, upload_date, recording_date, note 
                 FROM recordings 
                 WHERE organization_id = ?
             """
@@ -157,7 +159,8 @@ class Recording:
                 organization_id=row['organization_id'],
                 user_id=row['user_id'],
                 upload_date=row['upload_date'],
-                recording_date=row['recording_date']
+                recording_date=row['recording_date'],
+                note=row['note']
             )
             for row in rows
         ]
@@ -209,3 +212,14 @@ class Recording:
     def belongs_to_organization(self, organization_id):
         """Check if recording belongs to specific organization"""
         return self.organization_id == organization_id
+    
+
+    def update_note(self, new_note):
+        """Update the note for this recording"""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE recordings SET note = ? WHERE id = ?",
+                (new_note, self.id)
+            )
+        self.note = new_note

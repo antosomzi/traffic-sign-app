@@ -164,7 +164,8 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
             "user_id": rec.user_id,
             "uploader_name": rec.uploader_name,
             "upload_date": rec.upload_date.isoformat() if rec.upload_date else None,
-            "recording_date": rec.recording_date.isoformat() if rec.recording_date else None
+            "recording_date": rec.recording_date.isoformat() if rec.recording_date else None,
+            "note": rec.note
         })
 
     # Sorting is already handled by database query, no need to sort here
@@ -305,3 +306,32 @@ def toggle_validation(recording_id):
         "signs_count": signs_count,
         "recording_id": recording_id
     })
+
+@status_bp.route("/api/recording/<recording_id>/note", methods=["POST"])
+@login_required
+def update_note(recording_id):
+    """
+    Update the note for a recording.
+    
+    Request body (JSON):
+        - note: string (the note content)
+    Returns:
+        JSON with success status and updated note   
+    """
+    recording= Recording.get_by_id(recording_id)
+    if not recording:
+        return jsonify({"error": "Recording not found"}), 404
+    if recording.organization_id != current_user.organization_id:
+        return jsonify({"error": "Access denied"}), 403
+    data = request.get_json() or {}
+    note = data.get("note", "")
+    try:
+        recording.update_note(note)
+        return jsonify({
+            "success": True, 
+            "note": note,
+            "recording_id": recording_id
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to update note: {str(e)}"}), 500
+

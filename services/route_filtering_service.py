@@ -41,6 +41,11 @@ def _get_org_routes_path(org_id: int) -> str:
 
 def _get_org_id_for_recording(recording_id: str) -> Optional[int]:
     """Look up the organisation that owns *recording_id*."""
+    import sys
+    APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if APP_DIR not in sys.path:
+        sys.path.insert(0, APP_DIR)
+        
     try:
         from models.recording import Recording
         rec = Recording.get_by_id(recording_id)

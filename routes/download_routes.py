@@ -33,7 +33,7 @@ def download_zip(recording_id):
     
     # Find GPS and video files
     gps_files = find_gps_files(rec_folder)
-    video_file = find_video_file(rec_folder)
+    video_file_info = find_video_file(rec_folder)
     
     # Create ZIP file (uses pre-merged signs_merged.csv or falls back to runtime merge)
     zip_filename = f"{recording_id}_results.zip"
@@ -42,7 +42,7 @@ def download_zip(recording_id):
         rec_folder,
         json_file,
         gps_files,
-        video_file
+        video_file_info
     )
     
     return send_file(mem_zip, as_attachment=True, download_name=zip_filename, mimetype="application/zip")

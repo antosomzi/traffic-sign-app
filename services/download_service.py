@@ -59,14 +59,16 @@ def find_gps_files(rec_folder: str) -> List[str]:
     return gps_files
 
 
-def find_video_file(rec_folder: str) -> Optional[str]:
-    """Find the MP4 video file - check local EFS first, then download from S3."""
+def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
+    """Find the MP4 video file - check local EFS first, then download from S3.
+    Returns: (path_to_video, is_temporary)
+    """
     # Check local EFS first
     for root, dirs, files in os.walk(rec_folder):
         if "camera" in root:
             for f in files:
                 if f.endswith(".mp4"):
-                    return os.path.join(root, f)
+                    return os.path.join(root, f), False
     
     # No local video found - check if it's on S3
     status_file = os.path.join(rec_folder, "status.json")
@@ -95,11 +97,11 @@ def find_video_file(rec_folder: str) -> Optional[str]:
                     local_path = os.path.join(camera_folder, os.path.basename(s3_key))
                     print(f"📥 Downloading video from S3 for download...")
                     if s3_service.download_video(s3_key, local_path):
-                        return local_path
+                        return local_path, True
         except Exception as e:
             print(f"⚠️ Error downloading video from S3: {e}")
     
-    return None
+    return None, False
 
 
 def create_csv_only_zip(recording_id: str, rec_folder: str) -> io.BytesIO:
@@ -119,9 +121,11 @@ def create_full_results_zip(
     rec_folder: str,
     json_file: str,
     gps_files: List[str],
-    video_file: Optional[str]
+    video_file_info: tuple[Optional[str], bool]
 ) -> io.BytesIO:
-    """Create a ZIP file containing merged CSV, JSON, GPS data, and video."""
+    """Create a ZIP file containing merged CSV, JSON, GPS data, and video.
+    video_file_info is a tuple of (path, is_temporary). If temporary, it will be deleted after zipping.
+    """
     merged = get_merged_signs_content(rec_folder)
 
     mem_zip = io.BytesIO()
@@ -136,8 +140,17 @@ def create_full_results_zip(
             zipf.write(gps_file, arcname=f"location/{os.path.basename(gps_file)}")
         
         # Add video
+        video_file, is_temp = video_file_info
         if video_file and os.path.isfile(video_file):
             zipf.write(video_file, arcname=f"camera/{os.path.basename(video_file)}")
+            
+            # Auto-cleanup temporary video downloaded from S3
+            if is_temp:
+                try:
+                    os.remove(video_file)
+                    print(f"🧹 Cleaned up temporary video file: {video_file}")
+                except Exception as e:
+                    print(f"⚠️ Failed to clean up temp video: {e}")
     
     mem_zip.seek(0)
     return mem_zip
