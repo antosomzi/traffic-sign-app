@@ -973,7 +973,7 @@
                         </div>
                     </div>
                     <div class="recording-header-right">
-                        <button class="rerun-btn" data-recording-id="{{ rec.id }}" {% if rec.status == "processing" %}disabled{% endif %} title="{% if rec.status == 'processing' %}Cannot re-run while processing{% else %}Re-run pipeline for this recording{% endif %}">↻</button>
+                        <button class="rerun-btn" data-recording-id="{{ rec.id }}" title="Re-run pipeline for this recording (restart from step 0)">↻</button>
                         {% if is_local_mode %}
                         <button class="test-error-btn" data-recording-id="{{ rec.id }}" {% if rec.status == "processing" %}disabled{% endif %} title="{% if rec.status == 'processing' %}Cannot test while processing{% else %}Simulate pipeline error (test only){% endif %}">⚠️</button>
                         {% endif %}
@@ -1492,8 +1492,7 @@
                         <button
                             class="rerun-btn"
                             data-recording-id="${escapeHtml(rec.id)}"
-                            ${isProcessing ? 'disabled' : ''}
-                            title="${isProcessing ? 'Cannot re-run while processing' : 'Re-run pipeline for this recording'}"
+                            title="Re-run pipeline for this recording (restart from step 0)"
                         >
                             ↻
                         </button>

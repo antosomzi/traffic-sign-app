@@ -34,17 +34,14 @@ def rerun_recording(recording_id: str):
             "message": "Recording not found."
         }), 404
 
-    # Check if currently processing
+    # Read current status to tailor response messaging (rerun is allowed even while processing)
     status_file = os.path.join(recording_path, "status.json")
+    was_processing = False
     if os.path.exists(status_file):
         try:
             with open(status_file, "r") as handle:
                 status_data = json.load(handle)
-                if status_data.get("status") == "processing":
-                    return jsonify({
-                        "success": False,
-                        "message": "Recording is currently processing."
-                    }), 400
+                was_processing = status_data.get("status") == "processing"
         except Exception:
             pass
 
@@ -78,8 +75,8 @@ def rerun_recording(recording_id: str):
     # Update status.json to show the recording is queued again
     create_status_file(
         recording_path,
-        "validated",
-        "Recording re-queued for processing."
+        "processing",
+        "Pipeline restart requested. Re-running from step 0..."
     )
 
     try:
@@ -92,5 +89,5 @@ def rerun_recording(recording_id: str):
 
     return jsonify({
         "success": True,
-        "message": "Pipeline re-run has been queued successfully."
+        "message": "Pipeline re-run has been queued successfully." if not was_processing else "Pipeline restart requested. A fresh run from step 0 has been queued."
     }), 200
