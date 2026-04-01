@@ -67,6 +67,11 @@ class S3VideoService:
                 
             return True
         except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            error_message = e.response.get('Error', {}).get('Message', '')
+            if error_code == 'InvalidObjectState' or 'storage class' in error_message.lower():
+                raise ValueError("This video is archived in Glacier (cold storage) because it is old. Please contact the administrator manually to restore the video.")
+            
             print(f"❌ S3 ClientError: {e}")
             return False
         except Exception as e:

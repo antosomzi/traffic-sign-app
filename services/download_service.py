@@ -98,6 +98,9 @@ def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
                     print(f"📥 Downloading video from S3 for download...")
                     if s3_service.download_video(s3_key, local_path):
                         return local_path, True
+        except ValueError as ve:
+            # Re-raise the ValueError so the route can handle it
+            raise ve
         except Exception as e:
             print(f"⚠️ Error downloading video from S3: {e}")
     

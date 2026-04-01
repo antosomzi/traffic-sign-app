@@ -1,6 +1,6 @@
 """Download routes for retrieving processing results"""
 
-from flask import Blueprint, send_file, abort, request
+from flask import Blueprint, send_file, abort, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from decorators.auth_decorators import api_key_required
 from services.download_service import (
@@ -33,7 +33,12 @@ def download_zip(recording_id):
     
     # Find GPS and video files
     gps_files = find_gps_files(rec_folder)
-    video_file_info = find_video_file(rec_folder)
+    
+    try:
+        video_file_info = find_video_file(rec_folder)
+    except ValueError as ve:
+        flash(str(ve), "danger")
+        return redirect(url_for("status.list_recordings"))
     
     # Create ZIP file (uses pre-merged signs_merged.csv or falls back to runtime merge)
     zip_filename = f"{recording_id}_results.zip"
