@@ -150,7 +150,7 @@ Header: X-API-Key: sk_live_xxxxxxxxxxxxx
 
 ```bash
 curl -X GET \
-  "https://your-api.com/download/csv-only-range?start=2024-01-01&end=2024-01-31" \
+   "https://pima.sci.ce.gatech.edu/download/csv-only-range?start=2024-01-01&end=2024-01-31" \
   -H "X-API-Key: sk_live_xxxxxxxxxxxxx" \
   -o recordings_january.zip
 ```
@@ -166,7 +166,7 @@ import zipfile
 import io
 
 API_KEY = "sk_live_xxxxxxxxxxxxx"
-BASE_URL = "https://your-api.com"
+BASE_URL = " "https://pima.sci.ce.gatech.edu"
 
 params = {"start": "2024-01-01", "end": "2024-01-31"}
 headers = {"X-API-Key": API_KEY}
