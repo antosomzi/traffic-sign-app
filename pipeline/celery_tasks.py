@@ -14,6 +14,7 @@ if APP_DIR not in sys.path:
 from celery_app import celery
 from pipeline.gpu.runner import start_and_run_pipeline_ssh
 from pipeline.post_processing import generate_merged_signs_csv
+from services.filtered_output_json import filter_output_json
 from services.route_filtering_service import filter_signs_by_org_routes
 from services.s3_service import S3VideoService, get_camera_folder
 
@@ -199,6 +200,9 @@ def run_pipeline_local(recording_id, recording_path):
         # Route filtering: keep only signs near the org's routes (if routes exist)
         filter_signs_by_org_routes(recording_path, recording_id)
 
+        # Enrich output.json with root-level filtered cluster IDs (if filtered CSV exists)
+        filter_output_json(recording_id)
+
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)
 
@@ -290,6 +294,9 @@ def run_pipeline_gpu(recording_id, recording_path):
         # Route filtering: keep only signs near the org's routes (if routes exist)
         filter_signs_by_org_routes(recording_path, recording_id)
 
+        # Enrich output.json with root-level filtered cluster IDs (if filtered CSV exists)
+        filter_output_json(recording_id)
+        
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)
         

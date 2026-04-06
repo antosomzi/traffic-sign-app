@@ -46,12 +46,22 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         
-        .filter-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+        .filters-compact {
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            box-shadow: none;
+            margin-bottom: 8px;
+        }
+
+        .filters-compact h5 {
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .filters-compact h6 {
+            font-size: 13px;
+            margin-bottom: 0;
         }
         
         .loading-overlay {
@@ -113,7 +123,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 0;
         }
 
         .navbar h1 {
@@ -174,7 +184,7 @@
             padding: 15px;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin: 15px 0;
+            margin: 0 0 15px 0;
         }
 
         .section {
@@ -276,21 +286,35 @@
         .filter-form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 2px;
         }
 
         .filter-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
             align-items: end;
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            min-width: 160px;
+            gap: 2px;
+            min-width: 130px;
+        }
+
+        .filters-compact .form-control,
+        .filters-compact .form-select {
+            min-width: 0;
+            font-size: 13px;
+            padding: 6px 10px;
+            height: 34px;
+        }
+
+        .filters-compact .form-label {
+            font-size: 12px;
+            margin-bottom: 0;
+            line-height: 1.05;
         }
 
         .rerun-btn {
@@ -367,16 +391,25 @@
 
         /* Signs filter section */
         .signs-filter-section {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #e0e0e0;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #eef2f7;
         }
 
         .signs-filter-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
+        }
+
+        .signs-filter-section h5,
+        .org-routes-section h5 {
+            margin: 0;
+            padding: 0;
+            font-size: 14px;
+            line-height: 1.2;
+            font-weight: 600;
         }
 
         .signs-filter-header h6 {
@@ -450,14 +483,14 @@
         /* Multi-select for signs filters */
         .signs-filter-row {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             flex-wrap: wrap;
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         .signs-filter-group {
             flex: 1;
-            min-width: 180px;
+            min-width: 150px;
         }
 
         .signs-filter-group label {
@@ -478,9 +511,9 @@
 
         /* Organization routes layer styles */
         .org-routes-section {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #e0e0e0;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid #eef2f7;
         }
 
         .org-routes-header {
@@ -540,8 +573,8 @@
 
     <div class="container-fluid p-0">
         <div class="section-map">
-            <div class="filter-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div class="filters-compact">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px;">
                     <h5 style="margin-bottom: 0;">Routes Filters</h5>
                     <button type="button" class="rerun-btn" id="refreshCacheBtn" title="Refresh cache">
                         ↻
@@ -570,7 +603,7 @@
                 <div class="signs-filter-section">
                     <div class="signs-filter-header">
                         <h5>Traffic sign Filters</h5>
-                        <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
                             <h6 style="margin: 0; font-size: 14px; color: #4b5563; display: flex; align-items: center; gap: 6px;">
                                 🚦 Traffic Signs <span class="signs-count-badge" id="signsCountBadge">0</span>
                             </h6>
@@ -603,7 +636,7 @@
                 <div class="org-routes-section">
                     <div class="org-routes-header">
                         <h5>🛣️ Organization Road Network</h5>
-                        <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
                             <h6>
                                 Road Segments <span class="org-routes-count-badge" id="orgRoutesCountBadge">0</span>
                             </h6>
@@ -616,7 +649,7 @@
                             </div>
                         </div>
                     </div>
-                    <p style="font-size: 12px; color: #9ca3af; margin-top: 5px;">
+                    <p style="font-size: 11px; color: #9ca3af; margin-top: 3px; margin-bottom: 0;">
                         Roads owned by your organization are displayed in black.
                         {% if current_user.is_org_owner or current_user.is_admin %}
                         <a href="{{ url_for('org_owner.manage_routes') }}" style="color: #3b82f6;">Manage routes →</a>
