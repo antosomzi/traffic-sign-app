@@ -41,7 +41,43 @@ By projecting our data into UTM:
 
 ---
 
-## 4. The Overall Process (Step by Step)
+## 4. How UTM Works: The Transverse Cylinder
+Imagine wrapping a piece of paper in the shape of a cylinder around the Earth (like an orange). 
+Instead of wrapping it horizontally along the Equator (a classic projection), UTM wraps it **vertically**, passing through both poles. This is called a "Transverse" projection.
+
+The paper touches the Earth perfectly along a single vertical line, called the *Central Meridian*. On this contact line, the projection is perfect: there is absolutely zero distortion.
+
+### 4.1. The 60 Vertical "Slices" (UTM Zones)
+If we were to project the entire world onto this single cylinder, countries far away from the contact line would appear stretched and distorted (a country on the edge would look gigantic).
+To maintain extreme precision, UTM "cheats": it slices the Earth into **60 vertical zones**, like segments of an orange, each being 6 degrees wide.
+
+For each zone, we rotate the cylinder so that it touches exactly the center of that specific 6-degree slice.
+Within this narrow band, the distortion is almost non-existent (about 1 meter of error for every 2,500 meters).
+
+### 4.2. Mathematical Transformation (Degrees to Meters)
+Once we isolate our small 6-degree corridor and project our map onto the cylinder, we unroll the paper flat. We then draw a standard X and Y grid:
+
+* **The Y-axis (Northing):** This is simply the distance in meters from the Equator. If you are 3,500,000 meters north of the equator, your Y = 3,500,000. *(For the southern hemisphere, to avoid negative numbers, the South Pole is treated as point 0, putting the Equator at 10,000,000 meters).*
+* **The X-axis (Easting):** The center of your vertical slice (the Central Meridian) acts as the vertical axis. To ensure we never deal with negative numbers when moving west, UTM arbitrarily assigns the value X = 500,000 meters to this central meridian. If you are 50 km west of the center, your X is 450,000. If you are 50 km east, your X is 550,000.
+
+---
+
+## 5. The Polar Problem and the UPS Solution
+There is a fundamental geometric flaw with this vertical cylinder approach: as you get closer to the poles, the vertical meridian lines converge and the 6-degree bands become tiny and unusable. 
+
+Here is how reality handles this glitch:
+
+1. **UTM stops before the poles:** Because the system turns chaotic at the extremes, cartographers made a strict rule: UTM is officially cut off at the poles. The UTM grid only covers the Earth between 80° South and 84° North latitude. (They pushed it to 84° North just to fit all of Greenland and Northern Canada). If your algorithm tries to calculate UTM coordinates beyond these limits, it will crash or return absurd numbers.
+2. **The Backup System: UPS (Universal Polar Stereographic):** For polar zones (Antarctica in the south, and the Arctic Ocean in the north), the UTM cylinder is abandoned in favor of its sibling system, the UPS.
+   * **The flat sheet:** Instead of wrapping a cylinder around the Earth, imagine placing a completely flat sheet of paper balancing directly on top of the North Pole (like a flat hat).
+   * **The projection:** The "light source" is placed at the opposite pole, projecting the shadows of the continents straight up onto this flat sheet.
+   * **The result:** This creates a perfect circular map, ideal for mapping the poles without crushing them.
+
+*In summary for your code: Currently, the application maps local roads far from the poles, making UTM flawless and extremely accurate. However, if the organization someday decides to scan trail signs on snowmobile paths at the North Pole, the spatial filtering code will throw an error and will need to implement a switch to a polar projection (UPS).*
+
+---
+
+## 6. The Overall Process (Step by Step)
 
 Here is how the magic happens invisibly after the machine learning pipeline:
 
@@ -55,6 +91,20 @@ Here is how the magic happens invisibly after the machine learning pipeline:
 
 3. **Buffer Creation:**
    Now that it represents a grid in meters, the algorithm digitally "draws" a precise 50-meter corridor on each side of the road network.
+
+### Important Geometry Detail: Why the 50 m corridor is perpendicular to the route
+
+This perpendicular behavior is automatic once geometries are projected in UTM (meters).
+
+In code, the route filtering service applies a geometric buffer operation on each route LineString (equivalent to `line.buffer(50)`).
+Mathematically, a line buffer is the set of all points located at a distance of at most 50 meters from the line center.
+
+That means the corridor is built using the **local normal direction** of the line at every point (i.e. locally perpendicular to the route direction):
+- on straight segments, it is exactly perpendicular to the segment;
+- on curves, the normal rotates continuously, so the corridor follows the curve smoothly;
+- no fixed global X/Y offset is used.
+
+So we do **not** manually compute route angles or perpendicular vectors in application code. The geometry engine computes this correctly from the route shape, as long as the operation is done in a metric CRS (UTM), not directly in WGS84 degrees.
 
 4. **Spatial Sorting (Intersection):**
    The system overlaps the position of the points (the detected signs) with the surface of this corridor. 

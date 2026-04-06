@@ -130,7 +130,12 @@ def filter_signs_by_org_routes(
         routes_gdf = routes_gdf.to_crs("EPSG:4326")
 
     # Determine a suitable UTM CRS from the centroid of the routes
-    centroid = routes_gdf.geometry.unary_union.centroid
+    routes_union = (
+        routes_gdf.geometry.union_all()
+        if hasattr(routes_gdf.geometry, "union_all")
+        else routes_gdf.geometry.unary_union
+    )
+    centroid = routes_union.centroid
     utm_crs = CRS.from_proj4(
         f"+proj=utm +zone={_utm_zone(centroid.x)} "
         f"+{'south ' if centroid.y < 0 else ''}+datum=WGS84"

@@ -422,7 +422,7 @@ class GeoService:
                                        recording_ids: Optional[List[str]] = None,
                                        user_ids: Optional[List[str]] = None) -> bool:
         """
-        Refresh the cache for organization routes by deleting the cached entry
+        Refresh (invalidate) the cache for organization routes by deleting the cached entry
 
         Args:
             org_id: Organization ID
