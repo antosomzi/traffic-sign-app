@@ -29,7 +29,12 @@ def get_merged_signs_content(rec_folder: str) -> str:
     """
     best_path = get_best_signs_csv_path(rec_folder)
     if not best_path:
-        abort(404, description="signs_merged.csv not found. Run: python migrations/generate_merged_signs.py")
+        recording_id = os.path.basename(rec_folder.rstrip(os.sep))
+        return (
+            "No CSV file was found for this recording.\n"
+            "This is probably a very old recording that predates merged CSV generation.\n"
+            f"recording_id={recording_id}\n"
+        )
 
     with open(best_path, "r", encoding="utf-8") as f:
         return f.read()
