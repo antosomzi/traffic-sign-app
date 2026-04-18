@@ -72,6 +72,15 @@ def start_and_run_pipeline_ssh(recording_id):
     ec2 = boto3.client("ec2", region_name=AWS_REGION)
     ssh = None
 
+    def _stop_instance_best_effort(reason: str):
+        """Try to stop GPU instance for any failure path without raising."""
+        try:
+            print(f"[GPU] Stopping instance {GPU_INSTANCE_ID} ({reason})...")
+            ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
+            print("✅ Instance stop requested")
+        except Exception as stop_error:
+            print(f"⚠️ Could not stop instance after {reason}: {stop_error}")
+
     try:
         print(f"[GPU] Checking instance {GPU_INSTANCE_ID} state...")
         response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
@@ -111,6 +120,7 @@ def start_and_run_pipeline_ssh(recording_id):
                 "timestamp": datetime.now().isoformat(),
             }
             print(f"[DEBUG] Diagnostics: {json.dumps(diagnostics, indent=2, default=str)}")
+            _stop_instance_best_effort("waiter failure")
             return False, GPU_INSTANCE_ID, "EC2 instance failed to start", error_details
 
         response = ec2.describe_instances(InstanceIds=[GPU_INSTANCE_ID])
@@ -143,6 +153,7 @@ def start_and_run_pipeline_ssh(recording_id):
                 "diagnostics": diagnostics,
                 "timestamp": datetime.now().isoformat(),
             }
+            _stop_instance_best_effort("ssh connection failure")
             return False, GPU_INSTANCE_ID, f"SSH connection failed: {ssh_error}", error_details
 
         print("[GPU] Mounting EFS...")
@@ -162,6 +173,7 @@ def start_and_run_pipeline_ssh(recording_id):
                 "stderr": mount_error,
                 "timestamp": datetime.now().isoformat(),
             }
+            _stop_instance_best_effort("efs mount failure")
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
 
@@ -184,6 +196,7 @@ def start_and_run_pipeline_ssh(recording_id):
                 "encode_command": encode_cmd,
                 "timestamp": datetime.now().isoformat(),
             }
+            _stop_instance_best_effort("gpu video encoding failure")
             return False, GPU_INSTANCE_ID, "GPU video encoding failed", error_details
 
         print("✅ GPU video encoding completed")
@@ -238,6 +251,7 @@ def start_and_run_pipeline_ssh(recording_id):
                 "docker_command": docker_cmd,
                 "timestamp": datetime.now().isoformat(),
             }
+            _stop_instance_best_effort("pipeline execution failure")
             return False, GPU_INSTANCE_ID, f"Pipeline failed (exit {exit_code})", error_details
 
         print(f"✅ Pipeline completed in {elapsed // 60}min")
@@ -261,11 +275,7 @@ def start_and_run_pipeline_ssh(recording_id):
             except Exception:
                 pass
 
-        try:
-            print(f"[GPU] Stopping instance {GPU_INSTANCE_ID} after error...")
-            ec2.stop_instances(InstanceIds=[GPU_INSTANCE_ID])
-        except Exception:
-            pass
+        _stop_instance_best_effort("unexpected exception")
 
         # For unexpected exceptions, capture diagnostics
         diagnostics = capture_instance_diagnostics(ec2, GPU_INSTANCE_ID)
