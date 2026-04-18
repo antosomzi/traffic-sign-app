@@ -13,18 +13,9 @@ from botocore.exceptions import WaiterError
 
 from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTANCE_ID
 from pipeline.gpu.diagnostics import capture_instance_diagnostics
+from services.s3_service import S3VideoService, find_video_in_recording
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
-
-
-def _tail_lines(text: str, max_lines: int = 20) -> str:
-    """Return the tail of multiline text for concise logs."""
-    if not text:
-        return ""
-    lines = text.strip().splitlines()
-    if len(lines) <= max_lines:
-        return "\n".join(lines)
-    return "\n".join(lines[-max_lines:])
 
 
 def _write_gpu_status(status_file, message):
@@ -88,21 +79,6 @@ def _build_vfrdet_probe_command(recording_path):
     )
 
 
-def _build_video_inspect_command(recording_path):
-    """Build remote shell command to inspect current camera video metadata."""
-    escaped_recording_path = shlex.quote(recording_path)
-    return (
-        "set -e; "
-        f"VIDEO_PATH=$(find {escaped_recording_path} -type f -path '*/camera/*.mp4' | head -n 1); "
-        'if [ -z "$VIDEO_PATH" ]; then echo "No camera mp4 found for inspect"; exit 12; fi; '
-        'echo "VIDEO_PATH=$VIDEO_PATH"; '
-        'ls -lh "$VIDEO_PATH"; '
-        'ffprobe -v error -select_streams v:0 '
-        '-show_entries stream=codec_name,avg_frame_rate,r_frame_rate,nb_frames,width,height,duration '
-        '-of default=noprint_wrappers=1:nokey=0 "$VIDEO_PATH"'
-    )
-
-
 def _extract_vfr_score(ffmpeg_output: str) -> float | None:
     """Extract VFR score from ffmpeg vfrdet output."""
     match = re.search(r"VFR:([0-9]*\.?[0-9]+)", ffmpeg_output)
@@ -114,22 +90,37 @@ def _extract_vfr_score(ffmpeg_output: str) -> float | None:
         return None
 
 
-def _log_remote_command(ssh, label: str, cmd: str, timeout: int = 120, tail_lines: int = 20):
-    """Run a remote command over SSH and log compact diagnostics."""
-    print(f"[GPU][DIAG] {label}: {cmd}")
-    _, stdout, stderr = ssh.exec_command(cmd, timeout=timeout)
-    exit_code = stdout.channel.recv_exit_status()
-    out_text = stdout.read().decode(errors="replace")
-    err_text = stderr.read().decode(errors="replace")
+def _sync_encoded_video_to_s3(
+    recording_path: str,
+    status_file: str,
+    recording_id: str,
+) -> tuple[bool, str]:
+    """Upload encoded camera video to S3 and persist S3 metadata in status.json."""
 
-    print(f"[GPU][DIAG] {label} exit={exit_code}")
-    out_tail = _tail_lines(out_text, max_lines=tail_lines)
-    err_tail = _tail_lines(err_text, max_lines=tail_lines)
-    if out_tail:
-        print(f"[GPU][DIAG] {label} stdout tail:\n{out_tail}")
-    if err_tail:
-        print(f"[GPU][DIAG] {label} stderr tail:\n{err_tail}")
-    return exit_code, out_text, err_text
+    encoded_video_path = find_video_in_recording(recording_path)
+    if not encoded_video_path or not os.path.exists(encoded_video_path):
+        return False, "Encoded camera video not found for S3 sync"
+
+    try:
+        s3_service = S3VideoService()
+        s3_key = s3_service.upload_video(encoded_video_path, recording_id)
+
+        try:
+            with open(status_file, "r") as f:
+                status_data = json.load(f)
+        except Exception:
+            status_data = {}
+
+        camera_folder = os.path.dirname(encoded_video_path)
+        status_data["video_s3_key"] = s3_key
+        status_data["camera_folder"] = os.path.relpath(camera_folder, recording_path)
+
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+
+        return True, s3_key
+    except Exception as e:
+        return False, f"Failed to sync encoded video to S3: {e}"
 
 
 def start_and_run_pipeline_ssh(recording_id):
@@ -243,40 +234,12 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
 
-        # Runtime diagnostics for ffmpeg/cuda environment on the remote GPU host
-        _log_remote_command(ssh, "which ffmpeg/ffprobe", "which ffmpeg; which ffprobe", timeout=30, tail_lines=10)
-        _log_remote_command(ssh, "ffmpeg version", "ffmpeg -version | head -n 2", timeout=30, tail_lines=10)
-        _log_remote_command(ssh, "ffprobe version", "ffprobe -version | head -n 2", timeout=30, tail_lines=10)
-        _log_remote_command(
-            ssh,
-            "nvenc encoder availability",
-            "ffmpeg -hide_banner -encoders 2>/dev/null | grep -i 'h264_nvenc' || true",
-            timeout=30,
-            tail_lines=10,
-        )
-        _log_remote_command(
-            ssh,
-            "nvidia-smi",
-            "nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || nvidia-smi || true",
-            timeout=30,
-            tail_lines=20,
-        )
-
         # Update status.json to show encoding/pipeline state (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         status_file = f"{recording_path}/status.json"
         _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
 
-        _log_remote_command(
-            ssh,
-            "video metadata before encode",
-            _build_video_inspect_command(recording_path),
-            timeout=120,
-            tail_lines=40,
-        )
-
         vfrdet_cmd = _build_vfrdet_probe_command(recording_path)
-        print("[GPU] Running vfrdet on source video...")
         _, vfr_before_stdout, vfr_before_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
         vfr_before_exit = vfr_before_stdout.channel.recv_exit_status()
         vfr_before_stdout_text = vfr_before_stdout.read().decode(errors="replace")
@@ -288,48 +251,26 @@ def start_and_run_pipeline_ssh(recording_id):
                 print(f"[GPU] 🎯 vfrdet source score: {vfr_before:.6f}")
             else:
                 print("[GPU] ⚠️ vfrdet source score not found in ffmpeg output")
-                print(f"[GPU][DIAG] vfrdet source tail:\n{_tail_lines(vfr_before_combined, max_lines=25)}")
         else:
             print(f"[GPU] ⚠️ vfrdet source probe failed (code={vfr_before_exit})")
-            print(f"[GPU][DIAG] vfrdet source tail:\n{_tail_lines(vfr_before_combined, max_lines=25)}")
 
-        print("[GPU] Re-encoding camera video with NVENC + CFR before pipeline...")
         encode_cmd = _build_nvenc_encode_command(recording_path)
-        encode_start = time.time()
         _, encode_stdout, encode_stderr = ssh.exec_command(encode_cmd, timeout=3600)
         encode_exit_code = encode_stdout.channel.recv_exit_status()
-        encode_elapsed = time.time() - encode_start
-        encode_stdout_text = encode_stdout.read().decode(errors="replace")
+        _ = encode_stdout.read().decode(errors="replace")
         encode_stderr_text = encode_stderr.read().decode(errors="replace")
-        print(f"[GPU][DIAG] encode exit={encode_exit_code}, elapsed={encode_elapsed:.2f}s")
         if encode_exit_code != 0:
-            encode_error = encode_stderr_text
-            print(f"❌ GPU video encoding failed: {encode_error}")
+            print("❌ GPU video encoding failed")
             error_details = {
                 "error_type": "gpu_video_encoding_failed",
                 "exit_code": encode_exit_code,
-                "stderr": encode_error[:4000],
+                "stderr": encode_stderr_text[:4000],
                 "encode_command": encode_cmd,
                 "timestamp": datetime.now().isoformat(),
             }
             _stop_instance_best_effort("gpu video encoding failure")
             return False, GPU_INSTANCE_ID, "GPU video encoding failed", error_details
 
-        print("✅ GPU video encoding completed")
-        if encode_stderr_text.strip():
-            print(f"[GPU][DIAG] encode stderr tail:\n{_tail_lines(encode_stderr_text, max_lines=25)}")
-        if encode_stdout_text.strip():
-            print(f"[GPU][DIAG] encode stdout tail:\n{_tail_lines(encode_stdout_text, max_lines=10)}")
-
-        _log_remote_command(
-            ssh,
-            "video metadata after encode",
-            _build_video_inspect_command(recording_path),
-            timeout=120,
-            tail_lines=40,
-        )
-
-        print("[GPU] Running vfrdet on encoded video...")
         _, vfr_after_stdout, vfr_after_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
         vfr_after_exit = vfr_after_stdout.channel.recv_exit_status()
         vfr_after_stdout_text = vfr_after_stdout.read().decode(errors="replace")
@@ -341,10 +282,23 @@ def start_and_run_pipeline_ssh(recording_id):
                 print(f"[GPU] 🎯 vfrdet encoded score: {vfr_after:.6f}")
             else:
                 print("[GPU] ⚠️ vfrdet encoded score not found in ffmpeg output")
-                print(f"[GPU][DIAG] vfrdet encoded tail:\n{_tail_lines(vfr_after_combined, max_lines=25)}")
         else:
             print(f"[GPU] ⚠️ vfrdet encoded probe failed (code={vfr_after_exit})")
-            print(f"[GPU][DIAG] vfrdet encoded tail:\n{_tail_lines(vfr_after_combined, max_lines=25)}")
+
+        s3_sync_ok, s3_sync_message = _sync_encoded_video_to_s3(
+            recording_path,
+            status_file,
+            recording_id,
+        )
+        if not s3_sync_ok:
+            error_details = {
+                "error_type": "gpu_s3_sync_failed",
+                "message": s3_sync_message,
+                "timestamp": datetime.now().isoformat(),
+            }
+            _stop_instance_best_effort("gpu s3 sync failure")
+            return False, GPU_INSTANCE_ID, "Failed to sync encoded video to S3", error_details
+        print(f"✅ Encoded video synced to S3: {s3_sync_message}")
 
         _write_gpu_status(status_file, "Pipeline running on GPU...")
 
@@ -401,6 +355,16 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, f"Pipeline failed (exit {exit_code})", error_details
 
         print(f"✅ Pipeline completed in {elapsed // 60}min")
+
+        # Keep historical cleanup behavior: once S3 is synced and pipeline is done,
+        # remove local camera video to save EFS space.
+        local_video_path = find_video_in_recording(recording_path)
+        if local_video_path:
+            try:
+                os.remove(local_video_path)
+                print(f"🗑️ Local video deleted after successful S3 sync: {local_video_path}")
+            except OSError as cleanup_error:
+                print(f"⚠️ Could not delete local video after S3 sync: {cleanup_error}")
 
         ssh.close()
         print("✅ SSH closed")

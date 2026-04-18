@@ -256,8 +256,13 @@ class ExtractionService:
             # Create initial status file
             create_status_file(final_path, "validated", "Upload and validation successful, awaiting processing.")
 
-            # Upload video to S3 and remove local copy to save EFS space
-            self._upload_recording_video_to_s3(final_path, zip_top, job_id)
+            # In GPU mode, defer S3 upload until after GPU re-encoding is done.
+            # In local mode, keep current behavior (upload during extraction).
+            if USE_GPU_INSTANCE:
+                print("⚡ USE_GPU_INSTANCE=true: deferring S3 upload until post-encoding")
+            else:
+                # Upload video to S3 and remove local copy to save EFS space
+                self._upload_recording_video_to_s3(final_path, zip_top, job_id)
 
             # Calculate size and mark as done
             size_bytes = compute_folder_size(final_path)
