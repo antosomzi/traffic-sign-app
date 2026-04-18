@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,50 @@ from pathlib import Path
 
 class VideoEncodingError(RuntimeError):
     """Raised when video encoding with ffmpeg fails."""
+
+
+def _probe_vfrdet(video_path: Path, timeout_seconds: int = 120) -> float | None:
+    """Run ffmpeg vfrdet filter and return parsed VFR score when available."""
+    cmd = [
+        "ffmpeg",
+        "-v",
+        "warning",
+        "-i",
+        str(video_path),
+        "-vf",
+        "vfrdet",
+        "-an",
+        "-f",
+        "null",
+        "-",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except Exception as exc:
+        print(f"⚠️ Could not run vfrdet on {video_path.name}: {exc}")
+        return None
+
+    if result.returncode != 0:
+        print(f"⚠️ vfrdet failed on {video_path.name} (code={result.returncode})")
+        return None
+
+    match = re.search(r"VFR:([0-9]*\.?[0-9]+)", result.stderr)
+    if not match:
+        print(f"⚠️ vfrdet score not found in ffmpeg output for {video_path.name}")
+        return None
+
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
 
 
 def _get_local_gpu_encoder() -> str:
@@ -46,7 +91,12 @@ def encode_video_cfr_semi_all_intra(input_path: str, timeout_seconds: int = 1800
 
     output_path = source.with_name(f"{source.stem}_encoded_cfr.mp4")
 
+    source_vfr_score = _probe_vfrdet(source, timeout_seconds=min(timeout_seconds, 120))
+    if source_vfr_score is not None:
+        print(f"🎯 vfrdet source ({source.name}): {source_vfr_score:.6f}")
+
     encoder = _get_local_gpu_encoder()
+    print(f"🎬 Local encoder selected: {encoder}")
 
     cmd = [
         "ffmpeg",
@@ -122,5 +172,9 @@ def encode_video_cfr_semi_all_intra(input_path: str, timeout_seconds: int = 1800
             f"Return code: {result.returncode}. "
             f"Details:\n{stderr_tail}"
         )
+
+    encoded_vfr_score = _probe_vfrdet(output_path, timeout_seconds=min(timeout_seconds, 120))
+    if encoded_vfr_score is not None:
+        print(f"🎯 vfrdet encoded ({output_path.name}): {encoded_vfr_score:.6f}")
 
     return str(output_path)
