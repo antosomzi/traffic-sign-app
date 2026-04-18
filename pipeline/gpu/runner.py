@@ -17,6 +17,16 @@ from pipeline.gpu.diagnostics import capture_instance_diagnostics
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 
 
+def _tail_lines(text: str, max_lines: int = 20) -> str:
+    """Return the tail of multiline text for concise logs."""
+    if not text:
+        return ""
+    lines = text.strip().splitlines()
+    if len(lines) <= max_lines:
+        return "\n".join(lines)
+    return "\n".join(lines[-max_lines:])
+
+
 def _write_gpu_status(status_file, message):
     """Update status.json from the orchestrator while preserving S3 metadata fields."""
     try:
@@ -74,7 +84,22 @@ def _build_vfrdet_probe_command(recording_path):
         "set -e; "
         f"VIDEO_PATH=$(find {escaped_recording_path} -type f -path '*/camera/*.mp4' | head -n 1); "
         'if [ -z "$VIDEO_PATH" ]; then echo "No camera mp4 found for vfrdet"; exit 12; fi; '
-        "ffmpeg -v warning -i \"$VIDEO_PATH\" -vf vfrdet -an -f null -"
+        "ffmpeg -hide_banner -i \"$VIDEO_PATH\" -vf vfrdet -an -f null -"
+    )
+
+
+def _build_video_inspect_command(recording_path):
+    """Build remote shell command to inspect current camera video metadata."""
+    escaped_recording_path = shlex.quote(recording_path)
+    return (
+        "set -e; "
+        f"VIDEO_PATH=$(find {escaped_recording_path} -type f -path '*/camera/*.mp4' | head -n 1); "
+        'if [ -z "$VIDEO_PATH" ]; then echo "No camera mp4 found for inspect"; exit 12; fi; '
+        'echo "VIDEO_PATH=$VIDEO_PATH"; '
+        'ls -lh "$VIDEO_PATH"; '
+        'ffprobe -v error -select_streams v:0 '
+        '-show_entries stream=codec_name,avg_frame_rate,r_frame_rate,nb_frames,width,height,duration '
+        '-of default=noprint_wrappers=1:nokey=0 "$VIDEO_PATH"'
     )
 
 
@@ -87,6 +112,24 @@ def _extract_vfr_score(ffmpeg_output: str) -> float | None:
         return float(match.group(1))
     except ValueError:
         return None
+
+
+def _log_remote_command(ssh, label: str, cmd: str, timeout: int = 120, tail_lines: int = 20):
+    """Run a remote command over SSH and log compact diagnostics."""
+    print(f"[GPU][DIAG] {label}: {cmd}")
+    _, stdout, stderr = ssh.exec_command(cmd, timeout=timeout)
+    exit_code = stdout.channel.recv_exit_status()
+    out_text = stdout.read().decode(errors="replace")
+    err_text = stderr.read().decode(errors="replace")
+
+    print(f"[GPU][DIAG] {label} exit={exit_code}")
+    out_tail = _tail_lines(out_text, max_lines=tail_lines)
+    err_tail = _tail_lines(err_text, max_lines=tail_lines)
+    if out_tail:
+        print(f"[GPU][DIAG] {label} stdout tail:\n{out_tail}")
+    if err_tail:
+        print(f"[GPU][DIAG] {label} stderr tail:\n{err_tail}")
+    return exit_code, out_text, err_text
 
 
 def start_and_run_pipeline_ssh(recording_id):
@@ -200,32 +243,67 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
 
+        # Runtime diagnostics for ffmpeg/cuda environment on the remote GPU host
+        _log_remote_command(ssh, "which ffmpeg/ffprobe", "which ffmpeg; which ffprobe", timeout=30, tail_lines=10)
+        _log_remote_command(ssh, "ffmpeg version", "ffmpeg -version | head -n 2", timeout=30, tail_lines=10)
+        _log_remote_command(ssh, "ffprobe version", "ffprobe -version | head -n 2", timeout=30, tail_lines=10)
+        _log_remote_command(
+            ssh,
+            "nvenc encoder availability",
+            "ffmpeg -hide_banner -encoders 2>/dev/null | grep -i 'h264_nvenc' || true",
+            timeout=30,
+            tail_lines=10,
+        )
+        _log_remote_command(
+            ssh,
+            "nvidia-smi",
+            "nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || nvidia-smi || true",
+            timeout=30,
+            tail_lines=20,
+        )
+
         # Update status.json to show encoding/pipeline state (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         status_file = f"{recording_path}/status.json"
         _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
 
+        _log_remote_command(
+            ssh,
+            "video metadata before encode",
+            _build_video_inspect_command(recording_path),
+            timeout=120,
+            tail_lines=40,
+        )
+
         vfrdet_cmd = _build_vfrdet_probe_command(recording_path)
         print("[GPU] Running vfrdet on source video...")
         _, vfr_before_stdout, vfr_before_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
         vfr_before_exit = vfr_before_stdout.channel.recv_exit_status()
+        vfr_before_stdout_text = vfr_before_stdout.read().decode(errors="replace")
+        vfr_before_stderr_text = vfr_before_stderr.read().decode(errors="replace")
+        vfr_before_combined = f"{vfr_before_stdout_text}\n{vfr_before_stderr_text}"
         if vfr_before_exit == 0:
-            vfr_before_output = vfr_before_stderr.read().decode()
-            vfr_before = _extract_vfr_score(vfr_before_output)
+            vfr_before = _extract_vfr_score(vfr_before_combined)
             if vfr_before is not None:
                 print(f"[GPU] 🎯 vfrdet source score: {vfr_before:.6f}")
             else:
                 print("[GPU] ⚠️ vfrdet source score not found in ffmpeg output")
+                print(f"[GPU][DIAG] vfrdet source tail:\n{_tail_lines(vfr_before_combined, max_lines=25)}")
         else:
-            vfr_before_err = vfr_before_stderr.read().decode()
-            print(f"[GPU] ⚠️ vfrdet source probe failed (code={vfr_before_exit}): {vfr_before_err[:500]}")
+            print(f"[GPU] ⚠️ vfrdet source probe failed (code={vfr_before_exit})")
+            print(f"[GPU][DIAG] vfrdet source tail:\n{_tail_lines(vfr_before_combined, max_lines=25)}")
 
         print("[GPU] Re-encoding camera video with NVENC + CFR before pipeline...")
         encode_cmd = _build_nvenc_encode_command(recording_path)
+        encode_start = time.time()
         _, encode_stdout, encode_stderr = ssh.exec_command(encode_cmd, timeout=3600)
         encode_exit_code = encode_stdout.channel.recv_exit_status()
+        encode_elapsed = time.time() - encode_start
+        encode_stdout_text = encode_stdout.read().decode(errors="replace")
+        encode_stderr_text = encode_stderr.read().decode(errors="replace")
+        print(f"[GPU][DIAG] encode exit={encode_exit_code}, elapsed={encode_elapsed:.2f}s")
         if encode_exit_code != 0:
-            encode_error = encode_stderr.read().decode()
+            encode_error = encode_stderr_text
             print(f"❌ GPU video encoding failed: {encode_error}")
             error_details = {
                 "error_type": "gpu_video_encoding_failed",
@@ -238,20 +316,35 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, "GPU video encoding failed", error_details
 
         print("✅ GPU video encoding completed")
+        if encode_stderr_text.strip():
+            print(f"[GPU][DIAG] encode stderr tail:\n{_tail_lines(encode_stderr_text, max_lines=25)}")
+        if encode_stdout_text.strip():
+            print(f"[GPU][DIAG] encode stdout tail:\n{_tail_lines(encode_stdout_text, max_lines=10)}")
+
+        _log_remote_command(
+            ssh,
+            "video metadata after encode",
+            _build_video_inspect_command(recording_path),
+            timeout=120,
+            tail_lines=40,
+        )
 
         print("[GPU] Running vfrdet on encoded video...")
         _, vfr_after_stdout, vfr_after_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
         vfr_after_exit = vfr_after_stdout.channel.recv_exit_status()
+        vfr_after_stdout_text = vfr_after_stdout.read().decode(errors="replace")
+        vfr_after_stderr_text = vfr_after_stderr.read().decode(errors="replace")
+        vfr_after_combined = f"{vfr_after_stdout_text}\n{vfr_after_stderr_text}"
         if vfr_after_exit == 0:
-            vfr_after_output = vfr_after_stderr.read().decode()
-            vfr_after = _extract_vfr_score(vfr_after_output)
+            vfr_after = _extract_vfr_score(vfr_after_combined)
             if vfr_after is not None:
                 print(f"[GPU] 🎯 vfrdet encoded score: {vfr_after:.6f}")
             else:
                 print("[GPU] ⚠️ vfrdet encoded score not found in ffmpeg output")
+                print(f"[GPU][DIAG] vfrdet encoded tail:\n{_tail_lines(vfr_after_combined, max_lines=25)}")
         else:
-            vfr_after_err = vfr_after_stderr.read().decode()
-            print(f"[GPU] ⚠️ vfrdet encoded probe failed (code={vfr_after_exit}): {vfr_after_err[:500]}")
+            print(f"[GPU] ⚠️ vfrdet encoded probe failed (code={vfr_after_exit})")
+            print(f"[GPU][DIAG] vfrdet encoded tail:\n{_tail_lines(vfr_after_combined, max_lines=25)}")
 
         _write_gpu_status(status_file, "Pipeline running on GPU...")
 
