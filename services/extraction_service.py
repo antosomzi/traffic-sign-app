@@ -1,14 +1,18 @@
 """Extraction service for handling ZIP file processing"""
 
+import io
+import json
 import os
 import shutil
 import zipfile
+from services.s3_service import S3VideoService, find_video_in_recording
+from services.video_encoding_service import VideoEncodingError, encode_video_cfr_semi_all_intra
 from services.redis_service import RedisProgressService
 from services.validation_service import ValidationService
 from utils.file_utils import compute_folder_size, create_status_file
 from utils.cleanup_utils import clean_macos_files
-import zipfile
-import io
+
+USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
 
 class ExtractionService:
     """Service for extracting and validating uploaded recordings"""
@@ -55,6 +59,72 @@ class ExtractionService:
                 return False, zip_top
         except Exception:
             return None, None
+
+    def _get_upload_source_path(self, video_path, job_id):
+        """Return the video path to upload (raw in GPU mode, encoded otherwise)."""
+        if USE_GPU_INSTANCE:
+            print("⚡ USE_GPU_INSTANCE=true: skipping local encoding at upload time")
+            return video_path
+
+        self.redis_service.update_extraction_progress(
+            job_id,
+            phase="encoding",
+            progress_percent=90,
+        )
+        print(f"🎬 Encoding video for CFR/semi All-Intra upload: {video_path}")
+        return encode_video_cfr_semi_all_intra(video_path)
+
+    def _update_status_with_s3_metadata(self, final_path, video_path, s3_key):
+        """Persist S3 metadata (key + camera folder) in status.json."""
+        camera_folder = os.path.dirname(video_path)
+        camera_folder_relative = os.path.relpath(camera_folder, final_path)
+
+        status_file = os.path.join(final_path, "status.json")
+        with open(status_file, 'r') as f:
+            status_data = json.load(f)
+
+        status_data['video_s3_key'] = s3_key
+        status_data['camera_folder'] = camera_folder_relative
+
+        with open(status_file, 'w') as f:
+            json.dump(status_data, f, indent=2)
+
+    @staticmethod
+    def _cleanup_local_video_files(video_path, upload_source_path):
+        """Remove local video files after successful S3 upload."""
+        if upload_source_path != video_path and os.path.exists(upload_source_path):
+            os.remove(upload_source_path)
+        if os.path.exists(video_path):
+            os.remove(video_path)
+
+    def _upload_recording_video_to_s3(self, final_path, zip_top, job_id):
+        """Upload recording video to S3 and clean local copy when successful."""
+        video_path = find_video_in_recording(final_path)
+        if not video_path:
+            print("⚠️ No video file found in recording")
+            return
+
+        try:
+            upload_source_path = self._get_upload_source_path(video_path, job_id)
+
+            self.redis_service.update_extraction_progress(
+                job_id,
+                phase="uploading",
+                progress_percent=97,
+            )
+
+            print(f"📤 Uploading video to S3: {upload_source_path}")
+            s3_service = S3VideoService()
+            s3_key = s3_service.upload_video(upload_source_path, zip_top)
+
+            self._update_status_with_s3_metadata(final_path, video_path, s3_key)
+            self._cleanup_local_video_files(video_path, upload_source_path)
+            print("✅ Video uploaded to S3, local copies deleted")
+        except Exception as upload_error:
+            if isinstance(upload_error, VideoEncodingError):
+                print(f"⚠️ Video encoding failed, original video remains on EFS: {upload_error}")
+            else:
+                print(f"⚠️ S3 upload failed, video remains on EFS: {upload_error}")
 
     def extract_archive(self, job_id, zip_path, temp_root, final_root):
         """
@@ -185,39 +255,9 @@ class ExtractionService:
 
             # Create initial status file
             create_status_file(final_path, "validated", "Upload and validation successful, awaiting processing.")
-            
+
             # Upload video to S3 and remove local copy to save EFS space
-            try:
-                from services.s3_service import S3VideoService, find_video_in_recording
-                s3_service = S3VideoService()
-                video_path = find_video_in_recording(final_path)
-                
-                if video_path:
-                    print(f"📤 Uploading video to S3: {video_path}")
-                    s3_key = s3_service.upload_video(video_path, zip_top)
-                    
-                    # Store camera folder path relative to recording root
-                    camera_folder = os.path.dirname(video_path)
-                    camera_folder_relative = os.path.relpath(camera_folder, final_path)
-                    
-                    # Update status.json with S3 reference and camera folder path
-                    status_file = os.path.join(final_path, "status.json")
-                    import json
-                    with open(status_file, 'r') as f:
-                        status_data = json.load(f)
-                    status_data['video_s3_key'] = s3_key
-                    status_data['camera_folder'] = camera_folder_relative
-                    with open(status_file, 'w') as f:
-                        json.dump(status_data, f, indent=2)
-                    
-                    # Delete local video to save EFS space
-                    os.remove(video_path)
-                    print(f"✅ Video uploaded to S3, local copy deleted")
-                else:
-                    print(f"⚠️ No video file found in recording")
-            except Exception as s3_error:
-                # Log but don't fail - video stays on EFS if S3 fails
-                print(f"⚠️ S3 upload failed, video remains on EFS: {s3_error}")
+            self._upload_recording_video_to_s3(final_path, zip_top, job_id)
 
             # Calculate size and mark as done
             size_bytes = compute_folder_size(final_path)

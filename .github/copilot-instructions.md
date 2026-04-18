@@ -32,7 +32,7 @@
 
 ## Data Flow
 
-1. **Upload** → Flask validates ZIP structure → Extracts to temp → Videos uploaded to S3 → Validates folder hierarchy → Moves atomically to `recordings/<recording_id>/`
+1. **Upload** → Flask validates ZIP structure → Extracts to temp → Video uploaded to S3 (raw when `USE_GPU_INSTANCE=true`; CFR CPU re-encode otherwise) → Validates folder hierarchy → Moves atomically to `recordings/<recording_id>/`
 2. **Processing** → Celery task queued → Downloads video from S3 → Runs 8-stage ML pipeline (`s0_detection` through `s7_export_csv`) → Post-processing merges `signs.csv` + `supports.csv` → Writes `result_pipeline_stable/signs_merged.csv` → Deletes local video
 3. **Results** → Downloads available at `/download/<recording_id>` (downloads video from S3, bundles with merged CSV, returns ZIP)
 
@@ -59,6 +59,7 @@ GPU mode architecture:
 - Main EC2 instance (t3.large) manages lifecycle
 - GPU instance (g6e.xlarge) with Deep Learning AMI
 - Shared EFS filesystem (`/home/ec2-user`) for recordings access
+- Before launching Docker pipeline, the GPU runner re-encodes the camera video with FFmpeg NVENC (`-c:v h264_nvenc`, CFR, GOP 10) on the GPU instance
 - See `pipeline/gpu/config.py` for instance IDs, regions, EFS DNS
 
 ## Critical File Structure
@@ -196,7 +197,7 @@ python app.py  # Dev mode (single worker, auto-reload)
 - **Post-processing**: `pipeline/post_processing.py` (signs CSV merge after pipeline)
 - **Route filtering**: `services/route_filtering_service.py` (sign filtering by org routes)
 - **Routes**: Split across `routes/` modules (auth, upload, status, download, delete, rerun, admin, org_owner, map)
-- **Services**: Modular services in `services/` (redis, s3, extraction, validation, deletion, download, organization, signs, route_filtering)
+- **Services**: Modular services in `services/` (redis, s3, extraction, video_encoding, validation, deletion, download, organization, signs, route_filtering)
 - **Models**: `models/` (user, organization, recording, sign, auth_token, database)
 - **Decorators**: `decorators/auth_decorators.py` for access control
 - **Migrations**: `migrations/` (add_validation_status.py for signs feature, generate_merged_signs.py for CSV merge)

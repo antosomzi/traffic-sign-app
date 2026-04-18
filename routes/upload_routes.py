@@ -193,12 +193,29 @@ def extract_status(job_id):
             "message": "Preparing extraction..."
         }), 200
 
+    if phase == "encoding":
+        return jsonify({
+            "status": "preparing",
+            "phase": "encoding",
+            "percent": progress_percent,
+            "message": "Encoding video (CFR / semi All-Intra)..."
+        }), 200
+
+    if phase == "uploading":
+        return jsonify({
+            "status": "preparing",
+            "phase": "uploading",
+            "percent": progress_percent,
+            "message": "Uploading encoded video to S3..."
+        }), 200
+
     if status == "running":
         total = prog["total_files"]
         done = prog["extracted_files"]
-        # Calculate progress: 30% (reading+writing) + 70% (extraction)
-        extraction_percent = (done / total) * 70 if total > 0 else 0
-        percent = 30 + extraction_percent
+        # Calculate progress: 30% (reading+writing) + 60% (extraction)
+        # Remaining 10% reserved for encoding/uploading/finalization phases
+        extraction_percent = (done / total) * 60 if total > 0 else 0
+        percent = min(89, 30 + extraction_percent)
         
         return jsonify({
             "status": "running",

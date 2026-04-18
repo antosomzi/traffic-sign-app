@@ -80,7 +80,29 @@ EOF
         echo "✓ Fichiers supports.csv, signs.csv et signs_merged.csv créés"
     else
         # Autres étapes: créer output.json
-        echo '{"status": "completed", "items_processed": 100}' > "$STEP_PATH/output.json"
+                cat << 'EOF' > "$STEP_PATH/output.json"
+{
+    "output": {
+        "frames": [
+            {
+                "frame_number": 0,
+                "signs": [
+                    {"cluster_id": 10},
+                    {"cluster_id": 30}
+                ]
+            },
+            {
+                "frame_number": 1,
+                "signs": [
+                    {"cluster_id": 20}
+                ]
+            }
+        ]
+    },
+    "status": "completed",
+    "items_processed": 100
+}
+EOF
         echo "✓ output.json créé"
     fi
 done

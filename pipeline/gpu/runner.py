@@ -1,6 +1,8 @@
 """GPU instance manager: start, run the pipeline over SSH, and shut down."""
 
 import json
+import os
+import shlex
 import time
 from datetime import datetime
 
@@ -12,6 +14,56 @@ from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTAN
 from pipeline.gpu.diagnostics import capture_instance_diagnostics
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
+
+
+def _write_gpu_status(status_file, message):
+    """Update status.json from the orchestrator while preserving S3 metadata fields."""
+    try:
+        existing_data = {}
+        try:
+            with open(status_file, "r") as f:
+                existing_data = json.load(f)
+        except Exception:
+            pass
+
+        status_data = {
+            "status": "processing",
+            "message": message,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        if existing_data.get("video_s3_key"):
+            status_data["video_s3_key"] = existing_data["video_s3_key"]
+        if existing_data.get("camera_folder"):
+            status_data["camera_folder"] = existing_data["camera_folder"]
+
+        with open(status_file, "w") as f:
+            json.dump(status_data, f, indent=2)
+    except Exception as e:  # pragma: no cover - remote filesystem side effect
+        print(f"⚠️ Could not update status file: {e}")
+
+
+def _build_nvenc_encode_command(recording_path):
+    """Build remote shell command to re-encode the recording camera video with NVENC + CFR."""
+    escaped_recording_path = shlex.quote(recording_path)
+    return (
+        "set -e; "
+        f"VIDEO_PATH=$(find {escaped_recording_path} -type f -path '*/camera/*.mp4' | head -n 1); "
+        'if [ -z "$VIDEO_PATH" ]; then echo "No camera mp4 found"; exit 12; fi; '
+        'ENCODED_PATH="${VIDEO_PATH%.mp4}__nvenc.mp4"; '
+        "ffmpeg -y -i \"$VIDEO_PATH\" "
+        "-c:v h264_nvenc "
+        "-preset p4 "
+        "-cq 18 "
+        "-fps_mode cfr "
+        "-g 10 "
+        "-keyint_min 10 "
+        "-sc_threshold 0 "
+        "-an "
+        "-movflags +faststart "
+        "\"$ENCODED_PATH\"; "
+        "mv \"$ENCODED_PATH\" \"$VIDEO_PATH\""
+    )
 
 
 def start_and_run_pipeline_ssh(recording_id):
@@ -113,35 +165,29 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
 
-        # Update status.json to show pipeline is running (avoid circular import)
+        # Update status.json to show encoding/pipeline state (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
         status_file = f"{recording_path}/status.json"
-        try:
-            # Load existing data to preserve video_s3_key and camera_folder
-            existing_data = {}
-            try:
-                with open(status_file, "r") as f:
-                    existing_data = json.load(f)
-            except Exception:
-                pass
-            
-            status_data = {
-                "status": "processing",
-                "message": "Pipeline running on GPU...",
+        _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
+
+        print("[GPU] Re-encoding camera video with NVENC + CFR before pipeline...")
+        encode_cmd = _build_nvenc_encode_command(recording_path)
+        _, encode_stdout, encode_stderr = ssh.exec_command(encode_cmd, timeout=3600)
+        encode_exit_code = encode_stdout.channel.recv_exit_status()
+        if encode_exit_code != 0:
+            encode_error = encode_stderr.read().decode()
+            print(f"❌ GPU video encoding failed: {encode_error}")
+            error_details = {
+                "error_type": "gpu_video_encoding_failed",
+                "exit_code": encode_exit_code,
+                "stderr": encode_error[:4000],
+                "encode_command": encode_cmd,
                 "timestamp": datetime.now().isoformat(),
             }
-            
-            # Preserve video_s3_key and camera_folder if they exist
-            if existing_data.get("video_s3_key"):
-                status_data["video_s3_key"] = existing_data["video_s3_key"]
-            if existing_data.get("camera_folder"):
-                status_data["camera_folder"] = existing_data["camera_folder"]
-            
-            with open(status_file, "w") as f:
-                json.dump(status_data, f, indent=2)
-            print("✅ Status updated: Pipeline running on GPU")
-        except Exception as e:  # pragma: no cover - remote filesystem side effect
-            print(f"⚠️ Could not update status file: {e}")
+            return False, GPU_INSTANCE_ID, "GPU video encoding failed", error_details
+
+        print("✅ GPU video encoding completed")
+        _write_gpu_status(status_file, "Pipeline running on GPU...")
 
         print("[GPU] Running real pipeline in Docker (may take several minutes)...")
         docker_cmd = (
