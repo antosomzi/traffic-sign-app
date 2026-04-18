@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shlex
 import time
 from datetime import datetime
@@ -64,6 +65,28 @@ def _build_nvenc_encode_command(recording_path):
         "\"$ENCODED_PATH\"; "
         "mv \"$ENCODED_PATH\" \"$VIDEO_PATH\""
     )
+
+
+def _build_vfrdet_probe_command(recording_path):
+    """Build remote shell command to compute VFR score on the camera video."""
+    escaped_recording_path = shlex.quote(recording_path)
+    return (
+        "set -e; "
+        f"VIDEO_PATH=$(find {escaped_recording_path} -type f -path '*/camera/*.mp4' | head -n 1); "
+        'if [ -z "$VIDEO_PATH" ]; then echo "No camera mp4 found for vfrdet"; exit 12; fi; '
+        "ffmpeg -v warning -i \"$VIDEO_PATH\" -vf vfrdet -an -f null -"
+    )
+
+
+def _extract_vfr_score(ffmpeg_output: str) -> float | None:
+    """Extract VFR score from ffmpeg vfrdet output."""
+    match = re.search(r"VFR:([0-9]*\.?[0-9]+)", ffmpeg_output)
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
 
 
 def start_and_run_pipeline_ssh(recording_id):
@@ -182,6 +205,21 @@ def start_and_run_pipeline_ssh(recording_id):
         status_file = f"{recording_path}/status.json"
         _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
 
+        vfrdet_cmd = _build_vfrdet_probe_command(recording_path)
+        print("[GPU] Running vfrdet on source video...")
+        _, vfr_before_stdout, vfr_before_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
+        vfr_before_exit = vfr_before_stdout.channel.recv_exit_status()
+        if vfr_before_exit == 0:
+            vfr_before_output = vfr_before_stderr.read().decode()
+            vfr_before = _extract_vfr_score(vfr_before_output)
+            if vfr_before is not None:
+                print(f"[GPU] 🎯 vfrdet source score: {vfr_before:.6f}")
+            else:
+                print("[GPU] ⚠️ vfrdet source score not found in ffmpeg output")
+        else:
+            vfr_before_err = vfr_before_stderr.read().decode()
+            print(f"[GPU] ⚠️ vfrdet source probe failed (code={vfr_before_exit}): {vfr_before_err[:500]}")
+
         print("[GPU] Re-encoding camera video with NVENC + CFR before pipeline...")
         encode_cmd = _build_nvenc_encode_command(recording_path)
         _, encode_stdout, encode_stderr = ssh.exec_command(encode_cmd, timeout=3600)
@@ -200,6 +238,21 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, "GPU video encoding failed", error_details
 
         print("✅ GPU video encoding completed")
+
+        print("[GPU] Running vfrdet on encoded video...")
+        _, vfr_after_stdout, vfr_after_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
+        vfr_after_exit = vfr_after_stdout.channel.recv_exit_status()
+        if vfr_after_exit == 0:
+            vfr_after_output = vfr_after_stderr.read().decode()
+            vfr_after = _extract_vfr_score(vfr_after_output)
+            if vfr_after is not None:
+                print(f"[GPU] 🎯 vfrdet encoded score: {vfr_after:.6f}")
+            else:
+                print("[GPU] ⚠️ vfrdet encoded score not found in ffmpeg output")
+        else:
+            vfr_after_err = vfr_after_stderr.read().decode()
+            print(f"[GPU] ⚠️ vfrdet encoded probe failed (code={vfr_after_exit}): {vfr_after_err[:500]}")
+
         _write_gpu_status(status_file, "Pipeline running on GPU...")
 
         print("[GPU] Running real pipeline in Docker (may take several minutes)...")
