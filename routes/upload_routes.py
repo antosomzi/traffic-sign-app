@@ -120,24 +120,47 @@ def upload_recording():
         
         # Extract archive
         print(f"📦 Starting extraction for job_id: {job_id}")
-        recording_id = extraction_service.extract_archive(
-            job_id, 
-            save_path, 
-            Config.TEMP_EXTRACT_FOLDER, 
-            Config.EXTRACT_FOLDER
-        )
-        print(f"📦 Extraction completed. recording_id: {recording_id}")
-        
+        try:
+            recording_id = extraction_service.extract_archive(
+                job_id,
+                save_path,
+                Config.TEMP_EXTRACT_FOLDER,
+                Config.EXTRACT_FOLDER
+            )
+            print(f"📦 Extraction completed. recording_id: {recording_id}")
+
+            # Safety net: if extraction returns None without a final explicit status,
+            # force an error to avoid leaving frontend stuck in "preparing".
+            if not recording_id:
+                print("❌ Extraction returned no recording_id. Ensuring Redis status is error.")
+                latest_prog = RedisProgressService.get_extraction_progress(job_id) or {}
+                if latest_prog.get("status") != "error":
+                    latest_prog["status"] = "error"
+                    latest_prog["phase"] = "failed"
+                    latest_prog["error_msg"] = (
+                        "Invalid archive: please check the folder structure "
+                        "(e.g., missing device/IMEI folder)."
+                    )
+                    RedisProgressService.set_extraction_progress(job_id, latest_prog)
+                return
+        except Exception as e:
+            print(f"❌ Extraction process crashed for job_id {job_id}: {e}")
+            latest_prog = RedisProgressService.get_extraction_progress(job_id) or {}
+            latest_prog["status"] = "error"
+            latest_prog["phase"] = "failed"
+            latest_prog["error_msg"] = f"Critical error during extraction: {str(e)}"
+            RedisProgressService.set_extraction_progress(job_id, latest_prog)
+            return
+
         # Register recording to organization with user_id
-        if recording_id:
-            try:
-                OrganizationService.register_recording(recording_id, user_organization_id, user_id=user_id)
-                print(f"✅ Recording {recording_id} registered to org {user_organization_id} by user {user_id}")
-            except Exception as e:
-                print(f"⚠️ Failed to register recording to organization: {e}")
+        try:
+            OrganizationService.register_recording(recording_id, user_organization_id, user_id=user_id)
+            print(f"✅ Recording {recording_id} registered to org {user_organization_id} by user {user_id}")
+        except Exception as e:
+            print(f"⚠️ Failed to register recording to organization: {e}")
         
         # Queue pipeline task if extraction succeeded
-        if recording_id and CELERY_AVAILABLE:
+        if CELERY_AVAILABLE:
             time.sleep(0.5)
             try:
                 run_pipeline_task.delay(recording_id)
@@ -145,7 +168,7 @@ def upload_recording():
             except Exception as e:
                 print(f"⚠️ Could not queue pipeline task: {e}")
         else:
-            print(f"⚠️ Pipeline not queued. recording_id: {recording_id}, CELERY_AVAILABLE: {CELERY_AVAILABLE}")
+            print(f"⚠️ Pipeline not queued. CELERY_AVAILABLE: {CELERY_AVAILABLE}")
 
     # Start save + extraction in background thread
     thread = threading.Thread(target=save_and_extract, daemon=True)
@@ -167,6 +190,16 @@ def extract_status(job_id):
     status = prog["status"]
     phase = prog.get("phase", "")
     progress_percent = prog.get("progress_percent", 0)
+
+    # Error must always win over phase-based UI states to avoid sticky "preparing".
+    if status == "error":
+        response = {
+            "status": "error",
+            "message": prog.get("error_msg", "Unknown error")
+        }
+        if prog.get("error_details"):
+            response["details"] = prog["error_details"]
+        return jsonify(response), 200
 
     # Handle reading and writing phases
     if status == "reading":
@@ -241,13 +274,12 @@ def extract_status(job_id):
             "message": "Upload validated, pipeline awaiting execution."
         }), 200
 
-    if status == "error":
-        response = {
-            "status": "error",
-            "message": prog.get("error_msg", "Unknown error")
+    return jsonify({
+        "status": "error",
+        "message": "Unexpected extraction state",
+        "details": {
+            "job_id": job_id,
+            "raw_status": status,
+            "raw_phase": phase
         }
-        if prog.get("error_details"):
-            response["details"] = prog["error_details"]
-        return jsonify(response), 200
-
-    return jsonify({"status": "queued"}), 200
+    }), 200
