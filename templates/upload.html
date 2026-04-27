@@ -406,6 +406,22 @@
                     const response = await fetch(`/extract_status/${jobId}`);
                     const data = await response.json();
 
+                    if (!response.ok) {
+                        clearInterval(interval);
+                        showMessage('error', data.error || data.message || 'Error checking extraction status');
+                        uploadBtn.disabled = false;
+                        progressContainer.style.display = 'none';
+                        return;
+                    }
+
+                    if (!data.status) {
+                        clearInterval(interval);
+                        showMessage('error', data.error || 'Invalid status response from server');
+                        uploadBtn.disabled = false;
+                        progressContainer.style.display = 'none';
+                        return;
+                    }
+
                     if (data.status === 'preparing') {
                         // Show progress for reading, writing, and preparing phases
                         const percent = data.percent || 0;
@@ -453,6 +469,11 @@
                         }
                         
                         showMessage('error', errorMsg);
+                        uploadBtn.disabled = false;
+                        progressContainer.style.display = 'none';
+                    } else {
+                        clearInterval(interval);
+                        showMessage('error', `Unexpected extraction status: ${data.status}`);
                         uploadBtn.disabled = false;
                         progressContainer.style.display = 'none';
                     }

@@ -855,7 +855,6 @@
         </div>
     </div>
 
-    <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal">
         <div class="modal">
             <div class="modal-header">
@@ -889,7 +888,6 @@
 
         <a href="/upload" class="nav-link">← Back to Upload</a>
 
-        <!-- Filter Bar -->
         <div class="filter-bar" id="filterBar">
             <div class="filter-group">
                 <label>👤 User:</label>
@@ -1554,8 +1552,8 @@
                 statusListEl.innerHTML = recordings.map(renderRecordingCardHTML).join('');
                 emptyStateEl.style.display = 'none';
             }
-
-            attachActionListeners();
+            
+            // Plus besoin d'appeler attachActionListeners(), la délégation gère le nouveau DOM automatiquement !
         }
 
         async function fetchStatuses(options = {}) {
@@ -1617,59 +1615,48 @@
             });
         }
 
-        function attachActionListeners() {
-            document.querySelectorAll('.delete-btn').forEach((button) => {
-                if (button.dataset.listenerAttached === 'true') {
-                    return;
-                }
+        // =========================================================================
+        // EVENT DELEGATION SETUP
+        // Remplace l'ancienne méthode attachActionListeners()
+        // =========================================================================
+        function setupEventDelegation() {
+            if (!statusListEl) return;
 
-                button.addEventListener('click', handleDeleteClick);
-                button.dataset.listenerAttached = 'true';
+            // 1. Délégation des clics sur les boutons
+            statusListEl.addEventListener('click', (event) => {
+                const deleteBtn = event.target.closest('.delete-btn');
+                if (deleteBtn) return handleDeleteClick(event, deleteBtn);
+
+                const rerunBtn = event.target.closest('.rerun-btn');
+                if (rerunBtn) return handleRerunClick(event, rerunBtn);
+
+                const testBtn = event.target.closest('.test-error-btn');
+                if (testBtn) return handleTestErrorClick(event, testBtn);
+
+                const validateBtn = event.target.closest('.validate-btn');
+                if (validateBtn) return handleValidateClick(event, validateBtn);
             });
 
-            document.querySelectorAll('.rerun-btn').forEach((button) => {
-                if (button.dataset.listenerAttached === 'true') {
-                    return;
+            // 2. Délégation pour l'input des notes (change et blur/focusout)
+            // L'événement 'change' bouillonne (bubbles) naturellement
+            statusListEl.addEventListener('change', (event) => {
+                if (event.target.matches('.note-input')) {
+                    handleNoteChange(event, event.target);
                 }
-
-                button.addEventListener('click', handleRerunClick);
-                button.dataset.listenerAttached = 'true';
             });
 
-            document.querySelectorAll('.test-error-btn').forEach((button) => {
-                if (button.dataset.listenerAttached === 'true') {
-                    return;
+            // On utilise 'focusout' car 'blur' ne bouillonne pas
+            statusListEl.addEventListener('focusout', (event) => {
+                if (event.target.matches('.note-input')) {
+                    handleNoteChange(event, event.target);
                 }
-
-                button.addEventListener('click', handleTestErrorClick);
-                button.dataset.listenerAttached = 'true';
-            });
-
-            document.querySelectorAll('.validate-btn').forEach((button) => {
-                if (button.dataset.listenerAttached === 'true') {
-                    return;
-                }
-
-                button.addEventListener('click', handleValidateClick);
-                button.dataset.listenerAttached = 'true';
-            });
-
-            document.querySelectorAll('.note-input').forEach((input) => {
-                if (input.dataset.listenerAttached === 'true') {
-                    return;
-                }
-
-                input.addEventListener('change', handleNoteChange);
-                // Also trigger when focus is lost
-                input.addEventListener('blur', handleNoteChange);
-                input.dataset.listenerAttached = 'true';
             });
         }
 
-        async function handleRerunClick(event) {
+        // Mise à jour des handlers pour accepter l'élément passé en paramètre
+        async function handleRerunClick(event, rerunBtn) {
             event.preventDefault();
 
-            const rerunBtn = event.currentTarget;
             const recordingId = rerunBtn.dataset.recordingId;
             const originalText = rerunBtn.innerHTML;
 
@@ -1724,10 +1711,9 @@
             }
         }
 
-        async function handleTestErrorClick(event) {
+        async function handleTestErrorClick(event, testBtn) {
             event.preventDefault();
 
-            const testBtn = event.currentTarget;
             const recordingId = testBtn.dataset.recordingId;
 
             const confirmed = await showConfirmModal({
@@ -1780,10 +1766,9 @@
             }
         }
 
-        async function handleValidateClick(event) {
+        async function handleValidateClick(event, validateBtn) {
             event.preventDefault();
 
-            const validateBtn = event.currentTarget;
             const recordingId = validateBtn.dataset.recordingId;
             const currentValidationStatus = validateBtn.dataset.validationStatus;
             const isCurrentlyValidated = currentValidationStatus === 'validated';
@@ -1860,8 +1845,7 @@
             }
         }
 
-        async function handleNoteChange(event) {
-            const input = event.currentTarget;
+        async function handleNoteChange(event, input) {
             const recordingId = input.dataset.recordingId;
             const noteContent = input.value;
             
@@ -1914,10 +1898,9 @@
             }
         }
 
-        async function handleDeleteClick(event) {
+        async function handleDeleteClick(event, deleteBtn) {
             event.preventDefault();
 
-            const deleteBtn = event.currentTarget;
             const recordingId = deleteBtn.dataset.recordingId;
 
             const confirmed = await showConfirmModal({
@@ -2015,7 +1998,8 @@
             refreshBtn.addEventListener('click', handleManualRefresh);
         }
 
-        attachActionListeners();
+        // Initialize event delegation instead of attaching N listeners
+        setupEventDelegation();
         scheduleStatusPolling();
 
         // Convert all recording names on page load

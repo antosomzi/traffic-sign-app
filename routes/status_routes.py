@@ -32,15 +32,8 @@ STEP_NAMES = [
 def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', sort_order='desc'):
     """
     Collect recordings for a specific organization with optional filtering and sorting.
-    
-    Args:
-        organization_id: Filter by organization
-        user_ids: Optional list of user IDs to filter by
-        sort_by: 'upload_date' or 'recording_date'
-        sort_order: 'asc' or 'desc'
     """
     recordings_root = Config.EXTRACT_FOLDER
-
     all_records = []
 
     if not os.path.isdir(recordings_root):
@@ -57,16 +50,17 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
     for rec in recordings:
         rec_id = rec.id
         rec_folder = os.path.join(recordings_root, rec_id)
+        
         if not os.path.isdir(rec_folder):
             continue
 
-        # Read status.json file
+        # 1. Read status.json file 
         status_file = os.path.join(rec_folder, "status.json")
         current_status = "validated"
         status_message = ""
         timestamp = None
         error_details = None
-        validation_status = "to_be_validated"  # Default validation status
+        validation_status = "to_be_validated"
 
         if os.path.isfile(status_file):
             try:
@@ -78,80 +72,53 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
                     error_details = status_data.get("error_details", None)
                     validation_status = status_data.get("validation_status", "to_be_validated")
             except Exception:
-                # Ignore malformed JSON and fall back to defaults
                 pass
-
-        # Check if processing outputs exist
-        result_root = os.path.join(rec_folder, "result_pipeline_stable")
-        has_results = os.path.isdir(result_root)
-        step_status = []
-        is_completed = False
+        display_status = current_status
+        display_message = status_message
         show_steps = False
+        step_status = []
 
-        if has_results:
-            final_output = os.path.join(result_root, "s7_export_csv", "supports.csv")
-            is_completed = os.path.isfile(final_output)
-
-        # Determine when the current processing run started (status timestamp)
-        run_started_at = None
-        if current_status == "processing" and timestamp:
-            try:
-                run_started_at = datetime.fromisoformat(timestamp).timestamp()
-            except ValueError:
-                run_started_at = None
-
-        # Build step progress when processing
-        if current_status == "processing" and has_results:
-            show_steps = True
-            for step in STEP_NAMES:
-                step_folder = os.path.join(result_root, step)
-
-                if step == "s7_export_csv":
-                    output_file = os.path.join(step_folder, "supports.csv")
-                else:
-                    output_file = os.path.join(step_folder, "output.json")
-
-                done_flag = False
-                if os.path.isfile(output_file):
-                    if run_started_at is None:
-                        done_flag = True
-                    else:
-                        try:
-                            done_flag = os.path.getmtime(output_file) >= run_started_at
-                        except OSError:
-                            done_flag = False
-
-                step_status.append({
-                    "name": step,
-                    "done": done_flag
-                })
-
-        # Determine display status prioritizing the explicit status.json value
+        # OPTIMISATION MAJEURE : On ne fait les vérifications lourdes que si c'est en cours
         if current_status == "processing":
-            display_status = "processing"
-            # Only show message if result folder doesn't exist yet
-            if has_results:
-                display_message = ""
-            else:
+            result_root = os.path.join(rec_folder, "result_pipeline_stable")
+            
+            if not os.path.isdir(result_root):
                 display_message = status_message or "Processing in progress..."
+            else:
+                display_message = ""
+                show_steps = True
+                
+                for step in STEP_NAMES:
+                    filename = "supports.csv" if step == "s7_export_csv" else "output.json"
+                    output_file = os.path.join(result_root, step, filename)
+                    
+                    step_status.append({
+                        "name": step,
+                        "done": os.path.isfile(output_file)
+                    })
+
         elif current_status == "error":
-            display_status = "error"
             display_message = status_message or "Error during processing"
+            
         elif current_status == "completed":
-            display_status = "completed"
             display_message = ""
+            
         elif current_status == "validated":
-            display_status = "validated"
             display_message = status_message or "Awaiting processing"
+            
         else:
-            # Fallback to inferred completion when status.json is missing or unexpected
-            if is_completed:
+            # Fallback de secours (Seulement si le statut est bizarre)
+            result_root = os.path.join(rec_folder, "result_pipeline_stable")
+            final_output = os.path.join(result_root, "s7_export_csv", "supports.csv")
+            
+            if os.path.isfile(final_output):
                 display_status = "completed"
                 display_message = ""
             else:
                 display_status = current_status or "validated"
                 display_message = status_message or "Awaiting processing"
 
+        # 3. Ajout à la liste
         all_records.append({
             "id": rec_id,
             "status": display_status,
@@ -171,7 +138,6 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
     # Sorting is already handled by database query, no need to sort here
 
     return all_records
-
 
 @status_bp.route("/status", methods=["GET"])
 @login_required

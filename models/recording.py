@@ -49,7 +49,7 @@ def parse_db_datetime(value):
 class Recording:
     """Recording entity linking recording_id to organization and user"""
     
-    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None):
+    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None, uploader_name=None):
         self.id = id  # recording_id (e.g., "2024_05_20_23_32_53_415")
         self.organization_id = organization_id
         self.user_id = user_id
@@ -58,7 +58,8 @@ class Recording:
         self.upload_date = parse_db_datetime(upload_date)
         self.recording_date = parse_db_datetime(recording_date)
         self._user = None
-    
+        self.uploader_name = uploader_name
+
     @property
     def user(self):
         """Lazy load user"""
@@ -67,11 +68,7 @@ class Recording:
             self._user = User.get_by_id(self.user_id)
         return self._user
     
-    @property
-    def uploader_name(self):
-        """Get uploader's name"""
-        return self.user.name if self.user else "Unknown"
-    
+
     @staticmethod
     def create(recording_id, organization_id, user_id=None):
         """Create a new recording entry"""
@@ -132,12 +129,14 @@ class Recording:
         
         with get_db() as conn:
             cursor = conn.cursor()
-            
             # Build query
             query = f"""
-                SELECT id, organization_id, user_id, upload_date, recording_date, note 
-                FROM recordings 
-                WHERE organization_id = ?
+                SELECT 
+                    r.id, r.organization_id, r.user_id, r.upload_date, 
+                    r.recording_date, r.note, u.name as uploader_name 
+                FROM recordings r
+                LEFT JOIN users u ON r.user_id = u.id
+                WHERE r.organization_id = ?
             """
             params = [organization_id]
             
@@ -160,7 +159,8 @@ class Recording:
                 user_id=row['user_id'],
                 upload_date=row['upload_date'],
                 recording_date=row['recording_date'],
-                note=row['note']
+                note=row['note'],
+                uploader_name=row['uploader_name']
             )
             for row in rows
         ]
