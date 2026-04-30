@@ -610,7 +610,7 @@
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <span class="zoom-hint" id="zoomHint">Show signs on map</span>
                                 <label class="toggle-switch">
-                                    <input type="checkbox" id="signsToggle" checked>
+                                    <input type="checkbox" id="signsToggle">
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
@@ -1190,16 +1190,29 @@
         // Signs toggle handler
         document.getElementById('signsToggle').addEventListener('change', function() {
             signsVisible = this.checked;
+            
             if (signsVisible) {
-                displaySigns();
+                if (!signsData) {
+                    loadSigns();
+                } else {
+                    displaySigns();
+                }
             } else {
+                // On cache tout
                 signsLayerGroup.clearLayers();
             }
         });
 
+        function handleSignFilterChange(){
+            if (signVisible){
+                loadSigns()
+            } else {
+                signData=null
+            }
+        }
         // Auto-apply signs filter on change
-        document.getElementById('signsRecording').addEventListener('change', loadSigns);
-        document.getElementById('signsMutcdCode').addEventListener('change', loadSigns);
+        document.getElementById('signsRecording').addEventListener('change', handleSignFilterChange);
+        document.getElementById('signsMutcdCode').addEventListener('change', handleSignFilterChange);
 
         // Auto-apply routes filter on change
         document.getElementById('fromDate').addEventListener('change', loadRoutes);
