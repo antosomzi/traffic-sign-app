@@ -78,7 +78,6 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
         show_steps = False
         step_status = []
 
-        # OPTIMISATION MAJEURE : On ne fait les vérifications lourdes que si c'est en cours
         if current_status == "processing":
             result_root = os.path.join(rec_folder, "result_pipeline_stable")
             
