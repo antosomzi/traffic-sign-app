@@ -32,12 +32,7 @@ def get_merged_signs_content(rec_folder: str) -> str:
     """
     best_path = get_best_signs_csv_path(rec_folder)
     if not best_path:
-        recording_id = os.path.basename(rec_folder.rstrip(os.sep))
-        return (
-            "No CSV file was found for this recording.\n"
-            "This is probably a very old recording that predates merged CSV generation.\n"
-            f"recording_id={recording_id}\n"
-        )
+        return None
 
     with open(best_path, "r", encoding="utf-8") as f:
         return f.read()
@@ -178,8 +173,16 @@ def create_multi_recordings_csv_zip(recordings_folders: List[tuple]) -> io.Bytes
     with zipfile.ZipFile(mem_zip, "w") as zipf:
         for rec_id, rec_folder in recordings_folders:
             merged = get_merged_signs_content(rec_folder)
-            zipf.writestr(f"{rec_id}/signs.csv", merged)
-            metadata = get_metadata_info(rec_id)
+            if merged is not None:
+                zipf.writestr(f"{rec_id}/signs.csv", merged)
+            try:
+                metadata = get_metadata_info(rec_id)
+            except Exception as exc:
+                metadata = json.dumps({
+                    "id": rec_id,
+                    "error": "metadata_generation_failed",
+                    "details": str(exc)
+                })
             zipf.writestr(f"{rec_id}/metadata.json", metadata)
            
 
