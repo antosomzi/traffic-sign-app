@@ -87,14 +87,31 @@ EOF
             {
                 "frame_number": 0,
                 "signs": [
-                    {"cluster_id": 10},
-                    {"cluster_id": 30}
+                    {
+                        "cluster_id": 0,
+                        "classification_confidence": 0.62,
+                        "detection_confidence": 0.91
+                    },
+                    {
+                        "cluster_id": 1,
+                        "classification_confidence": 0.74,
+                        "detection_confidence": 0.88
+                    }
                 ]
             },
             {
                 "frame_number": 1,
                 "signs": [
-                    {"cluster_id": 20}
+                    {
+                        "cluster_id": 0,
+                        "classification_confidence": 0.78,
+                        "detection_confidence": 0.86
+                    },
+                    {
+                        "cluster_id": 2,
+                        "classification_confidence": 0.69,
+                        "detection_confidence": 0.92
+                    }
                 ]
             }
         ]

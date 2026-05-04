@@ -14,6 +14,7 @@ if APP_DIR not in sys.path:
 from celery_app import celery
 from pipeline.gpu.runner import start_and_run_pipeline_ssh
 from pipeline.post_processing import generate_merged_signs_csv
+from services.confidence import add_confidence_to_merged_signs_csv
 from services.filtered_output_json import filter_output_json
 from services.route_filtering_service import filter_signs_by_org_routes
 from services.s3_service import S3VideoService, get_camera_folder
@@ -151,7 +152,7 @@ def run_pipeline_local(recording_id, recording_path):
             return f"Recording {recording_id} was deleted before pipeline started"
         
         # Download video from S3 if needed
-        local_video_path = download_video_from_s3(recording_path)
+        # local_video_path = download_video_from_s3(recording_path)
         
         # Check again after download
         if not os.path.exists(recording_path):
@@ -162,9 +163,12 @@ def run_pipeline_local(recording_id, recording_path):
 
         # Script is in the BASE_PATH directory
         pipeline_script = os.path.join(BASE_PATH, "simulate_pipeline.sh")
-        cmd = f"bash {pipeline_script} {recording_path}"
-
-        subprocess.run(cmd, shell=True, check=True)
+        subprocess.run(
+            ["bash", pipeline_script, recording_path],
+            check=True,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
 
         export_csv = os.path.join(result_folder, "s7_export_csv", "supports.csv")
 
@@ -294,8 +298,10 @@ def run_pipeline_gpu(recording_id, recording_path):
         # Route filtering: keep only signs near the org's routes (if routes exist)
         filter_signs_by_org_routes(recording_path, recording_id)
 
+        add_confidence_to_merged_signs_csv(recording_path)
+
         # Enrich output.json with root-level filtered cluster IDs (if filtered CSV exists)
-        filter_output_json(recording_id)
+        filter_output_json(recording_path,recording_id)
         
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)

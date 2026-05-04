@@ -36,13 +36,12 @@ def _load_filtered_indices(filtered_csv_path: str) -> set[int]:
     return filtered_indices
 
 
-def filter_output_json(recording_id):
+def filter_output_json(recording_path,recording_id):
     """Add root field `filtered_cluster_ids` into output.json when filtered CSV exists.
 
     The CSV `ID` values are interpreted as indices into the sorted unique list of
     cluster IDs found in `output.json`.
     """
-    recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
     filtered_csv_path = os.path.join(
         recording_path,
         "result_pipeline_stable",

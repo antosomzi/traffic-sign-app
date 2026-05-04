@@ -2,12 +2,15 @@
 
 import os
 import io
+import json
 import zipfile
 from typing import List, Optional
 from flask import abort
 from config import Config
 from pipeline.post_processing import get_merged_signs_csv_path
 from services.route_filtering_service import get_best_signs_csv_path
+from models.recording import Recording
+from models.organization import Organization
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -176,6 +179,30 @@ def create_multi_recordings_csv_zip(recordings_folders: List[tuple]) -> io.Bytes
         for rec_id, rec_folder in recordings_folders:
             merged = get_merged_signs_content(rec_folder)
             zipf.writestr(f"{rec_id}/signs.csv", merged)
+            metadata = get_metadata_info(rec_id)
+            zipf.writestr(f"{rec_id}/metadata.json", metadata)
+           
 
     mem_zip.seek(0)
     return mem_zip
+
+def get_metadata_info(rec_id: str) -> str:
+    recording = Recording.get_by_id(rec_id)
+    if not recording:
+        return json.dumps({"id": rec_id, "error": "recording_not_found"})
+
+    organization = Organization.get_by_id(recording.organization_id)
+    user = recording.user
+
+    value = {
+        "id": recording.id,
+        "organization_id": recording.organization_id,
+        "organization_name": organization.name if organization else None,
+        "user_id": recording.user_id,
+        "user_name": user.name if user else None,
+        "upload_date": recording.upload_date.isoformat() if recording.upload_date else None,
+        "recording_date": recording.recording_date.isoformat() if recording.recording_date else None,
+    }
+
+    return json.dumps(value, default=str)
+
