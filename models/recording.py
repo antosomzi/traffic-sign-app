@@ -49,11 +49,13 @@ def parse_db_datetime(value):
 class Recording:
     """Recording entity linking recording_id to organization and user"""
     
-    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None, uploader_name=None):
+    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None, uploader_name=None, model_history_id=None, model_history_name=None):
         self.id = id  # recording_id (e.g., "2024_05_20_23_32_53_415")
         self.organization_id = organization_id
         self.user_id = user_id
         self.note = note
+        self.model_history_id = model_history_id
+        self.model_history_name = model_history_name
         # Parse dates from strings if needed
         self.upload_date = parse_db_datetime(upload_date)
         self.recording_date = parse_db_datetime(recording_date)
@@ -70,16 +72,16 @@ class Recording:
     
 
     @staticmethod
-    def create(recording_id, organization_id, user_id=None):
+    def create(recording_id, organization_id, user_id=None, model_history_id=None):
         """Create a new recording entry"""
         recording_date = parse_recording_date(recording_id)
         
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """INSERT INTO recordings (id, organization_id, user_id, recording_date) 
-                   VALUES (?, ?, ?, ?)""",
-                (recording_id, organization_id, user_id, recording_date)
+                """INSERT INTO recordings (id, organization_id, user_id, model_history_id, recording_date) 
+                   VALUES (?, ?, ?, ?, ?)""",
+                (recording_id, organization_id, user_id, model_history_id, recording_date)
             )
         return Recording.get_by_id(recording_id)
     
@@ -89,7 +91,7 @@ class Recording:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """SELECT id, organization_id, user_id, upload_date, recording_date, note 
+                     """SELECT id, organization_id, user_id, model_history_id, upload_date, recording_date, note 
                    FROM recordings WHERE id = ?""",
                 (recording_id,)
             )
@@ -100,6 +102,7 @@ class Recording:
                 id=row['id'],
                 organization_id=row['organization_id'],
                 user_id=row['user_id'],
+                model_history_id=row['model_history_id'],
                 upload_date=row['upload_date'],
                 recording_date=row['recording_date'],
                 note=row['note']
@@ -107,7 +110,7 @@ class Recording:
         return None
     
     @staticmethod
-    def get_by_organization(organization_id, user_ids=None, sort_by='upload_date', sort_order='desc'):
+    def get_by_organization(organization_id, user_ids=None, model_history_ids=None, sort_by='upload_date', sort_order='desc'):
         """
         Get all recordings for an organization with optional filtering and sorting.
         
@@ -132,10 +135,12 @@ class Recording:
             # Build query
             query = f"""
                 SELECT 
-                    r.id, r.organization_id, r.user_id, r.upload_date, 
-                    r.recording_date, r.note, u.name as uploader_name 
+                    r.id, r.organization_id, r.user_id, r.model_history_id, r.upload_date, 
+                    r.recording_date, r.note, u.name as uploader_name,
+                    m.version_name as model_history_name
                 FROM recordings r
                 LEFT JOIN users u ON r.user_id = u.id
+                LEFT JOIN model_history m ON r.model_history_id = m.id
                 WHERE r.organization_id = ?
             """
             params = [organization_id]
@@ -145,6 +150,12 @@ class Recording:
                 placeholders = ','.join(['?' for _ in user_ids])
                 query += f" AND user_id IN ({placeholders})"
                 params.extend(user_ids)
+
+            # Add model filter if provided
+            if model_history_ids:
+                placeholders = ','.join(['?' for _ in model_history_ids])
+                query += f" AND r.model_history_id IN ({placeholders})"
+                params.extend(model_history_ids)
             
             # Add sorting
             query += f" ORDER BY {sort_by} {sort_order}"
@@ -157,6 +168,8 @@ class Recording:
                 id=row['id'],
                 organization_id=row['organization_id'],
                 user_id=row['user_id'],
+                model_history_id=row['model_history_id'],
+                model_history_name=row['model_history_name'],
                 upload_date=row['upload_date'],
                 recording_date=row['recording_date'],
                 note=row['note'],

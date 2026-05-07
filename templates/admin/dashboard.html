@@ -232,22 +232,59 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2>System Controls</h2>
             </div>
-            <div style="background: #fdf2f8; border: 1px solid #fbcfe8; padding: 20px; border-radius: 8px;">
-                <h3 style="color: #9d174d; margin-bottom: 10px;">Maintenance Mode</h3>
-                <p style="color: #be185d; margin-bottom: 15px; font-size: 14px;">
-                    When enabled, a red warning banner will be displayed to all users across the entire application indicating that the system is undergoing maintenance.
-                </p>
-                <form action="{{ url_for('admin.toggle_maintenance') }}" method="POST">
-                    {% if maintenance_mode %}
-                        <button type="submit" class="btn btn-primary maintenance-active">
-                            🟢 Disable Maintenance Mode
+            <div style="display: flex; gap: 20px;">
+                
+                <div style="flex: 1; background: #fdf2f8; border: 1px solid #fbcfe8; padding: 20px; border-radius: 8px;">
+                    <h3 style="color: #9d174d; margin-bottom: 10px;">Maintenance Mode</h3>
+                    <p style="color: #be185d; margin-bottom: 15px; font-size: 14px;">
+                        When enabled, a red warning banner will be displayed to all users across the entire application indicating that the system is undergoing maintenance.
+                    </p>
+                    <form action="{{ url_for('admin.toggle_maintenance') }}" method="POST">
+                        {% if maintenance_mode %}
+                            <button type="submit" class="btn btn-primary maintenance-active">
+                                🟢 Disable Maintenance Mode
+                            </button>
+                        {% else %}
+                            <button type="submit" class="btn btn-primary maintenance-btn" onclick="return confirm('Are you sure you want to enable Maintenance Mode? A warning banner will appear for all users.');">
+                                🔴 Enable Maintenance Mode
+                            </button>
+                        {% endif %}
+                    </form>
+                </div>
+
+                <div style="flex: 1; background: #eff6ff; border: 1px solid #bfdbfe; padding: 20px; border-radius: 8px;">
+                    <h3 style="color: #1e3a8a; margin-bottom: 10px;">Active Model</h3>
+                    <p style="color: #1d4ed8; margin-bottom: 15px; font-size: 14px;">
+                        Select the model version that the processing pipeline should use.
+                    </p>
+                    
+                    <form action="{{ url_for('admin.set_active_model_global') }}" method="POST" style="display: flex; gap: 10px; align-items: center;">
+                        <select name="model_id" style="padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; flex: 1; font-size: 14px; background: white;">
+                            {% for history in model_histories %}
+                                <option value="{{ history.id }}" {% if history.is_active %}selected style="background: #dbeafe; color: #1e40af; font-weight: 600;"{% endif %}>
+                                    {{ history.version_name }} (Updated: {{ history.updated_date.strftime('%Y-%m-%d') if history.updated_date else 'N/A' }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="background: #2563eb; white-space: nowrap;">
+                            Update Model
                         </button>
-                    {% else %}
-                        <button type="submit" class="btn btn-primary maintenance-btn" onclick="return confirm('Are you sure you want to enable Maintenance Mode? A warning banner will appear for all users.');">
-                            🔴 Enable Maintenance Mode
+                    </form>
+
+                    <form action="{{ url_for('admin.create_model_history') }}" method="POST" style="display: flex; gap: 10px; align-items: center; margin-top: 12px;">
+                        <input
+                            type="text"
+                            name="version_name"
+                            placeholder="New model version name"
+                            style="padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; flex: 1; font-size: 14px;"
+                            required
+                        />
+                        <button type="submit" class="btn btn-primary" style="background: #0f766e; white-space: nowrap;">
+                            + Create Model
                         </button>
-                    {% endif %}
-                </form>
+                    </form>
+                </div>
+
             </div>
         </div>
 

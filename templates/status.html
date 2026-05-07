@@ -276,6 +276,29 @@
             }
         }
 
+        .qa-qc-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .qa-qc-btn:hover:not(:disabled) {
+            background: #059669;
+        }
+
+        .qa-qc-btn:disabled {
+            background: #d1fae5;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+
         .rerun-btn {
             background: #3b82f6;
             color: white;
@@ -763,6 +786,21 @@
             transform: none;
         }
 
+        .model-history-tag {
+            background: #eef2ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            margin-left: 6px;
+        }
+
         .validation-badge {
             padding: 4px 10px;
             border-radius: 12px;
@@ -907,6 +945,25 @@
                     </div>
                 </div>
             </div>
+
+            <div class="filter-group">
+                <label>🧠 Model:</label>
+                <div class="multi-select-dropdown" id="model-dropdown">
+                    <div class="dropdown-toggle" id="model-dropdown-toggle">
+                        <span class="selected-text">All Models</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="dropdown-menu" id="model-dropdown-menu">
+                        {% for model_history in model_histories %}
+                        <label class="dropdown-item">
+                            <input type="checkbox" value="{{ model_history.id }}"
+                                {% if current_filters.model_ids and model_history.id in current_filters.model_ids %}checked{% endif %}>
+                            <span>{{ model_history.version_name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
             
             <div class="filter-group">
                 <label>📅 Sort by:</label>
@@ -955,6 +1012,9 @@
                                 <button class="validate-btn {% if rec.validation_status == 'validated' %}validated{% endif %}" data-recording-id="{{ rec.id }}" data-validation-status="{{ rec.validation_status }}" title="{% if rec.validation_status == 'validated' %}Click to unvalidate this recording{% else %}Click to validate this recording{% endif %}">
                                     {% if rec.validation_status == 'validated' %}✓ Validated{% else %}To be validated{% endif %}
                                 </button>
+                                {% if rec.model_history_name %}
+                                <span class="model-history-tag">🧠 {{ rec.model_history_name }}</span>
+                                {% endif %}
                                 {% endif %}
                             </div>
                             
@@ -971,6 +1031,7 @@
                         </div>
                     </div>
                     <div class="recording-header-right">
+                        <button class="qa-qc-btn" type="button" data-recording-id="{{ rec.id }}" title="Go to QA/QC (placeholder)">Go to QA/QC</button>
                         <button class="rerun-btn" data-recording-id="{{ rec.id }}" title="Re-run pipeline for this recording (restart from step 0)">↻</button>
                         {% if is_local_mode %}
                         <button class="test-error-btn" data-recording-id="{{ rec.id }}" {% if rec.status == "processing" %}disabled{% endif %} title="{% if rec.status == 'processing' %}Cannot test while processing{% else %}Simulate pipeline error (test only){% endif %}">⚠️</button>
@@ -1111,6 +1172,7 @@
         // Filter state
         let filterState = {
             userIds: {{ current_filters.user_ids | tojson | default('[]') }},
+            modelIds: {{ current_filters.model_ids | tojson | default('[]') }},
             sortBy: '{{ current_filters.sort_by }}',
             sortOrder: '{{ current_filters.sort_order }}'
         };
@@ -1119,6 +1181,9 @@
         const userDropdown = document.getElementById('user-dropdown');
         const userDropdownToggle = document.getElementById('user-dropdown-toggle');
         const userDropdownMenu = document.getElementById('user-dropdown-menu');
+    const modelDropdown = document.getElementById('model-dropdown');
+    const modelDropdownToggle = document.getElementById('model-dropdown-toggle');
+    const modelDropdownMenu = document.getElementById('model-dropdown-menu');
         const sortDropdown = document.getElementById('sort-dropdown');
         const sortDropdownToggle = document.getElementById('sort-dropdown-toggle');
         const sortDropdownMenu = document.getElementById('sort-dropdown-menu');
@@ -1149,6 +1214,13 @@
             userDropdownToggle.addEventListener('click', (e) => {
                 e.stopPropagation();
                 toggleDropdown(userDropdown, userDropdownMenu);
+            });
+        }
+
+        if (modelDropdownToggle) {
+            modelDropdownToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDropdown(modelDropdown, modelDropdownMenu);
             });
         }
 
@@ -1190,6 +1262,28 @@
             }
         }
 
+        function updateModelDropdownDisplay() {
+            const checkboxes = modelDropdownMenu.querySelectorAll('input[type="checkbox"]');
+            const selectedNames = [];
+            filterState.modelIds = [];
+
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    filterState.modelIds.push(parseInt(cb.value));
+                    selectedNames.push(cb.parentElement.querySelector('span').textContent);
+                }
+            });
+
+            const displayText = modelDropdownToggle.querySelector('.selected-text');
+            if (selectedNames.length === 0) {
+                displayText.textContent = 'All Models';
+            } else if (selectedNames.length === 1) {
+                displayText.textContent = selectedNames[0];
+            } else {
+                displayText.textContent = `${selectedNames.length} models selected`;
+            }
+        }
+
         // User checkbox change handler (auto-apply)
         if (userDropdownMenu) {
             userDropdownMenu.addEventListener('change', (e) => {
@@ -1199,6 +1293,18 @@
                 }
             });
         }
+
+        if (modelDropdownMenu) {
+            modelDropdownMenu.addEventListener('change', (e) => {
+                if (e.target.type === 'checkbox') {
+                    updateModelDropdownDisplay();
+                    applyFilters();
+                }
+            });
+        }
+
+        updateUserDropdownDisplay();
+        updateModelDropdownDisplay();
 
         // Sort option click handler (auto-apply)
         if (sortDropdownMenu) {
@@ -1227,6 +1333,9 @@
             // Multi-select user filter
             filterState.userIds.forEach(id => {
                 params.append('user_ids', id);
+            });
+            filterState.modelIds.forEach(id => {
+                params.append('model_ids', id);
             });
             params.set('sort_by', filterState.sortBy);
             params.set('sort_order', filterState.sortOrder);
@@ -1441,9 +1550,12 @@
             
             const status = rec.validation_status || 'to_be_validated';
             const config = VALIDATION_CONFIG[status] || VALIDATION_CONFIG.to_be_validated;
+            const modelTag = rec.model_history_name
+                ? `<span class="model-history-tag">🧠 ${escapeHtml(rec.model_history_name)}</span>`
+                : '';
             
             return `<button class="${config.btnClass}" data-recording-id="${escapeHtml(rec.id)}" 
-                data-validation-status="${escapeHtml(status)}" title="${config.title}">${config.text}</button>`;
+                data-validation-status="${escapeHtml(status)}" title="${config.title}">${config.text}</button>${modelTag}`;
         }
 
         function renderRecordingCardHTML(rec) {
@@ -1487,6 +1599,7 @@
                         </div>
                     </div>
                     <div class="recording-header-right">
+                        <button class="qa-qc-btn" type="button" data-recording-id="${escapeHtml(rec.id)}" title="Go to QA/QC (placeholder)">Go to QA/QC</button>
                         <button
                             class="rerun-btn"
                             data-recording-id="${escapeHtml(rec.id)}"

@@ -60,14 +60,32 @@ def init_db():
             FOREIGN KEY (organization_id) REFERENCES organizations(id)
         )
     """)
+
+    # Create model_history table (for ML model version tracking)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS model_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_name TEXT NOT NULL,
+            updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            is_active INTEGER DEFAULT 0
+        )
+    """)
+
+    # Create index for active model lookup
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_model_history_is_active
+        ON model_history(is_active)
+    """)
     
     # Create recordings table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS recordings (
             id TEXT PRIMARY KEY,
             organization_id INTEGER NOT NULL,
+            model_history_id INTEGER,
             upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (organization_id) REFERENCES organizations(id)
+            FOREIGN KEY (organization_id) REFERENCES organizations(id),
+            FOREIGN KEY (model_history_id) REFERENCES model_history(id)
         )
     """)
     

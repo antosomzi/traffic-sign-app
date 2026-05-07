@@ -10,6 +10,7 @@ from config import Config
 from services.organization_service import OrganizationService
 from services.signs_service import import_signs_for_recording, delete_signs_for_recording
 from models.user import User
+from models.model_history import ModelHistory
 from models.recording import Recording
 
 status_bp = Blueprint("status", __name__)
@@ -29,7 +30,7 @@ STEP_NAMES = [
 ]
 
 
-def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', sort_order='desc'):
+def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, sort_by='upload_date', sort_order='desc'):
     """
     Collect recordings for a specific organization with optional filtering and sorting.
     """
@@ -43,6 +44,7 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
     recordings = OrganizationService.get_recordings_for_organization(
         organization_id,
         user_ids=user_ids,
+        model_history_ids=model_history_ids,
         sort_by=sort_by,
         sort_order=sort_order
     )
@@ -127,11 +129,13 @@ def _collect_recordings(organization_id, user_ids=None, sort_by='upload_date', s
             "steps": step_status if show_steps else None,
             "error_details": error_details,
             "validation_status": validation_status,
+            "model_history_name": rec.model_history_name,
             "user_id": rec.user_id,
             "uploader_name": rec.uploader_name,
             "upload_date": rec.upload_date.isoformat() if rec.upload_date else None,
             "recording_date": rec.recording_date.isoformat() if rec.recording_date else None,
-            "note": rec.note
+            "note": rec.note,
+            "model_history_id": rec.model_history_id
         })
 
     # Sorting is already handled by database query, no need to sort here
@@ -144,27 +148,31 @@ def list_recordings():
     """Lists all recordings and their processing status for current user's organization."""
     # Parse query params for filtering/sorting (support both user_id and user_ids)
     user_ids = request.args.getlist('user_ids', type=int) or request.args.getlist('user_id', type=int) or None
+    model_ids = request.args.getlist('model_ids', type=int) or None
     sort_by = request.args.get('sort_by', 'upload_date')
     sort_order = request.args.get('sort_order', 'desc')
     
     records = _collect_recordings(
         current_user.organization_id,
         user_ids=user_ids,
+        model_history_ids=model_ids,
         sort_by=sort_by,
         sort_order=sort_order
     )
     
     # Get users in organization for filter dropdown
     org_users = User.get_by_organization(current_user.organization_id)
-    
+    model_histories=ModelHistory.get_all_model_history()
     return render_template(
         "status.html",
         recordings=records,
         step_names=STEP_NAMES,
         is_local_mode=IS_LOCAL_MODE,
         org_users=org_users,
+        model_histories=model_histories,
         current_filters={
             'user_ids': user_ids or [],
+            'model_ids': model_ids or [],
             'sort_by': sort_by,
             'sort_order': sort_order
         }
@@ -177,12 +185,14 @@ def status_data():
     """Returns the recording status data as JSON for AJAX polling."""
     # Parse query params for filtering/sorting (support both user_id and user_ids)
     user_ids = request.args.getlist('user_ids', type=int) or request.args.getlist('user_id', type=int) or None
+    model_ids = request.args.getlist('model_ids', type=int) or None
     sort_by = request.args.get('sort_by', 'upload_date')
     sort_order = request.args.get('sort_order', 'desc')
     
     records = _collect_recordings(
         current_user.organization_id,
         user_ids=user_ids,
+        model_history_ids=model_ids,
         sort_by=sort_by,
         sort_order=sort_order
     )

@@ -1,5 +1,6 @@
 """Organization service for multi-tenancy logic"""
 
+from models.model_history import ModelHistory
 from models.recording import Recording
 from models.organization import Organization
 
@@ -8,7 +9,7 @@ class OrganizationService:
     """Service for handling organization-related operations"""
     
     @staticmethod
-    def get_recordings_for_organization(organization_id, user_ids=None, sort_by='upload_date', sort_order='desc'):
+    def get_recordings_for_organization(organization_id, user_ids=None, model_history_ids=None, sort_by='upload_date', sort_order='desc'):
         """
         Get all recording IDs belonging to an organization with optional filtering/sorting
         
@@ -22,9 +23,10 @@ class OrganizationService:
             List of Recording objects
         """
         return Recording.get_by_organization(
-            organization_id, 
-            user_ids=user_ids, 
-            sort_by=sort_by, 
+            organization_id,
+            user_ids=user_ids,
+            model_history_ids=model_history_ids,
+            sort_by=sort_by,
             sort_order=sort_order
         )
     
@@ -89,7 +91,15 @@ class OrganizationService:
         Returns:
             Recording object
         """
-        return Recording.create(recording_id, organization_id, user_id=user_id)
+
+        current_model = ModelHistory.get_current_active()
+        model_history_id = current_model.id if current_model else None
+        return Recording.create(
+            recording_id=recording_id,
+            organization_id=organization_id,
+            user_id=user_id,
+            model_history_id=model_history_id
+        )
     
     @staticmethod
     def delete_recording(recording_id):

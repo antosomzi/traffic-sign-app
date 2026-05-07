@@ -3,6 +3,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import admin_required
+from models.model_history import ModelHistory
 from models.organization import Organization
 from models.user import User
 from models.api_key import APIKey
@@ -17,6 +18,7 @@ def dashboard():
     """Admin dashboard"""
     organizations = Organization.get_all()
     users = User.get_all()
+    model_histories= ModelHistory.get_all_model_history()
     
     # Calculate stats
     total_orgs = len(organizations)
@@ -31,7 +33,8 @@ def dashboard():
         total_users=total_users,
         total_recordings=total_recordings,
         organizations=organizations,
-        maintenance_mode=maintenance_mode
+        maintenance_mode=maintenance_mode,
+        model_histories=model_histories
     )
 
 @admin_bp.route("/toggle_maintenance", methods=["POST"])
@@ -359,3 +362,30 @@ def delete_api_key(key_id):
     APIKey.delete_by_id(key_id)
     flash("API key deleted successfully.", "success")
     return redirect(url_for('admin.list_api_keys'))
+
+@admin_bp.route("/set_active_model_global", methods=["POST"])
+@admin_required
+def set_active_model_global():
+    model_id = request.form.get("model_id")
+    if not model_id:
+        flash("Model ID is required.", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    ModelHistory.set_active_model(int(model_id))
+    flash("Active model updated.", "success")
+    return redirect(url_for("admin.dashboard"))
+
+
+@admin_bp.route("/models/new", methods=["POST"])
+@admin_required
+def create_model_history():
+    version_name = request.form.get("version_name", "").strip()
+    if not version_name:
+        flash("Model version name is required.", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    ModelHistory.create(version_name)
+    flash(f"Model '{version_name}' created successfully!", "success")
+    return redirect(url_for("admin.dashboard"))
+
+

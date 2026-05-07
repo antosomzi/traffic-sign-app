@@ -146,6 +146,11 @@ def run_pipeline_local(recording_id, recording_path):
     result_folder = os.path.join(recording_path, "result_pipeline_stable")
     local_video_path = None
 
+    def _safe_stream(stream):
+        if stream is None:
+            return None
+        return stream if hasattr(stream, "fileno") else None
+
     try:
         # Check if recording still exists before starting
         if not os.path.exists(recording_path):
@@ -166,8 +171,8 @@ def run_pipeline_local(recording_id, recording_path):
         subprocess.run(
             ["bash", pipeline_script, recording_path],
             check=True,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
+            stdout=_safe_stream(getattr(sys, "__stdout__", sys.stdout)),
+            stderr=_safe_stream(getattr(sys, "__stderr__", sys.stderr)),
         )
 
         export_csv = os.path.join(result_folder, "s7_export_csv", "supports.csv")
@@ -205,7 +210,7 @@ def run_pipeline_local(recording_id, recording_path):
         filter_signs_by_org_routes(recording_path, recording_id)
 
         # Enrich output.json with root-level filtered cluster IDs (if filtered CSV exists)
-        filter_output_json(recording_id)
+        filter_output_json(recording_path, recording_id)
 
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)

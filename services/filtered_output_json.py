@@ -36,7 +36,7 @@ def _load_filtered_indices(filtered_csv_path: str) -> set[int]:
     return filtered_indices
 
 
-def filter_output_json(recording_path,recording_id):
+def filter_output_json(recording_path, recording_id=None):
     """Add root field `filtered_cluster_ids` into output.json when filtered CSV exists.
 
     The CSV `ID` values are interpreted as indices into the sorted unique list of
