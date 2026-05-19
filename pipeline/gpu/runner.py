@@ -261,6 +261,7 @@ def start_and_run_pipeline_ssh(recording_id):
         encode_stderr_text = encode_stderr.read().decode(errors="replace")
         if encode_exit_code != 0:
             print("❌ GPU video encoding failed")
+            print(f"[GPU] Détails de l'erreur FFmpeg : {encode_stderr_text}") # <--- AJOUTEZ CETTE LIGNE
             error_details = {
                 "error_type": "gpu_video_encoding_failed",
                 "exit_code": encode_exit_code,
