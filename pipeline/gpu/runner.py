@@ -233,9 +233,35 @@ def start_and_run_pipeline_ssh(recording_id):
             _stop_instance_best_effort("efs mount failure")
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
-
+      
+        _, diag_stdout, diag_stderr = ssh.exec_command(diag_cmd)
+        diag_output = diag_stdout.read().decode(errors="replace")
+        diag_err = diag_stderr.read().decode(errors="replace")
+        
+        print(f"[GPU] 📊 Résultat du diagnostic :\n{diag_output}\n{diag_err}")
         # Update status.json to show encoding/pipeline state (avoid circular import)
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
+        print("[GPU] 🔍 Diagnostic de l'environnement en cours...")
+        
+        diag_cmd = f"""
+        echo '--- GPU ---'
+        nvidia-smi || echo 'NVIDIA-SMI FAILED'
+        
+        echo '--- FFMPEG ---'
+        ffmpeg -version | head -n 1 || echo 'FFMPEG NOT FOUND'
+        
+        echo '--- DISK ---'
+        df -h /
+        
+        echo '--- EFS FILE ---'
+        ls -la "{recording_path}"
+        """
+        
+        _, diag_stdout, diag_stderr = ssh.exec_command(diag_cmd)
+        diag_output = diag_stdout.read().decode(errors="replace").strip()
+        diag_err = diag_stderr.read().decode(errors="replace").strip()
+        
+        print(f"[GPU] 📊 Résultat du diagnostic :\n{diag_output}\n{diag_err}")
         status_file = f"{recording_path}/status.json"
         _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
 
@@ -255,6 +281,7 @@ def start_and_run_pipeline_ssh(recording_id):
             print(f"[GPU] ⚠️ vfrdet source probe failed (code={vfr_before_exit})")
 
         encode_cmd = _build_nvenc_encode_command(recording_path)
+        print(f"[GPU] Commande exécutée : {encode_cmd}") # <-- On affiche la commande exacte
         _, encode_stdout, encode_stderr = ssh.exec_command(encode_cmd, timeout=3600)
         encode_exit_code = encode_stdout.channel.recv_exit_status()
         _ = encode_stdout.read().decode(errors="replace")
