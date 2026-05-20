@@ -234,36 +234,40 @@ def start_and_run_pipeline_ssh(recording_id):
             return False, GPU_INSTANCE_ID, f"EFS mount failed: {mount_error}", error_details
         print("✅ EFS mounted")
       
-        _, diag_stdout, diag_stderr = ssh.exec_command(diag_cmd)
-        diag_output = diag_stdout.read().decode(errors="replace")
-        diag_err = diag_stderr.read().decode(errors="replace")
-        
-        print(f"[GPU] 📊 Résultat du diagnostic :\n{diag_output}\n{diag_err}")
-        # Update status.json to show encoding/pipeline state (avoid circular import)
+
+        print("✅ EFS mounted")
+
+        # Mise à jour du statut
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
+        status_file = f"{recording_path}/status.json"
+        try:
+            _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
+        except Exception as status_err:
+            print(f"[GPU] ⚠️ Impossible d'écrire le statut : {status_err}")
+
         print("[GPU] 🔍 Diagnostic de l'environnement en cours...")
         
+        # 1. On DEFINIT la commande
         diag_cmd = f"""
-        echo '--- GPU ---'
-        nvidia-smi || echo 'NVIDIA-SMI FAILED'
+echo '--- GPU ---'
+nvidia-smi || echo 'NVIDIA-SMI FAILED'
+echo '--- FFMPEG ---'
+ffmpeg -version | head -n 1 || echo 'FFMPEG NOT FOUND'
+echo '--- DISK ---'
+df -h /
+echo '--- EFS FILE ---'
+ls -la "{recording_path}"
+"""
         
-        echo '--- FFMPEG ---'
-        ffmpeg -version | head -n 1 || echo 'FFMPEG NOT FOUND'
-        
-        echo '--- DISK ---'
-        df -h /
-        
-        echo '--- EFS FILE ---'
-        ls -la "{recording_path}"
-        """
-        
+        # 2. On EXECUTE la commande
         _, diag_stdout, diag_stderr = ssh.exec_command(diag_cmd)
         diag_output = diag_stdout.read().decode(errors="replace").strip()
         diag_err = diag_stderr.read().decode(errors="replace").strip()
         
         print(f"[GPU] 📊 Résultat du diagnostic :\n{diag_output}\n{diag_err}")
-        status_file = f"{recording_path}/status.json"
-        _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
+
+        # --- VOTRE CODE ORIGINAL REPREND ICI ---
+        vfrdet_cmd = _build_vfrdet_probe_command(recording_path)
 
         vfrdet_cmd = _build_vfrdet_probe_command(recording_path)
         _, vfr_before_stdout, vfr_before_stderr = ssh.exec_command(vfrdet_cmd, timeout=600)
