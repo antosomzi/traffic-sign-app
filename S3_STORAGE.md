@@ -13,7 +13,7 @@ Video files (`.mp4`) are stored on **Amazon S3** instead of EFS to reduce storag
 ```
 s3://traffic-sign-videos/
 └── videos/
-    ├── prod/                          # Production uploads
+  ├── production/                    # Production uploads
     │   └── <recording_id>/
     │       └── <video>.mp4
     └── local/                         # Local development uploads
@@ -21,7 +21,7 @@ s3://traffic-sign-videos/
             └── <video>.mp4
 ```
 
-Environment is auto-detected: `/home/ec2-user` exists → `prod`, otherwise → `local`.
+Environment is auto-detected: `/home/ec2-user` exists → `production`, otherwise → `local`.
 
 ## Data Flow
 
@@ -29,7 +29,7 @@ Environment is auto-detected: `/home/ec2-user` exists → `prod`, otherwise → 
 UPLOAD
   └── Extract ZIP → Upload video to S3 → Delete local video
                           ↓
-              status.json: video_s3_key = "videos/prod/<id>/video.mp4"
+              status.json: video_s3_key = "videos/production/<id>/video.mp4"
 
 PIPELINE
   └── Download video from S3 → Run pipeline → Delete local video

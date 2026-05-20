@@ -14,7 +14,7 @@ class Config:
     # Auto-detect environment (EC2 vs local)
     if os.path.exists("/home/ec2-user"):
         BASE_PATH = "/home/ec2-user"
-        ENVIRONMENT = "prod"
+        ENVIRONMENT = "production"
     else:
         BASE_PATH = os.path.dirname(os.path.abspath(__file__))
         ENVIRONMENT = "local"
