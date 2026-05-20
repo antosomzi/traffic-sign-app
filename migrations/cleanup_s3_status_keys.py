@@ -175,16 +175,26 @@ def main() -> None:
 
     keys_to_delete: List[str] = []
     recordings_to_delete: List[str] = []
+    total_prefixes_found = 0
+    kept_prefixes = 0
 
     print("\n[S3 CLEANUP]")
     for prefix_root in prefix_roots:
         recording_ids = list_recording_prefixes(s3_client, bucket, prefix_root)
+        total_prefixes_found += len(recording_ids)
         for recording_id in recording_ids:
             if recording_id in ALLOWED_RECORDING_IDS:
+                kept_prefixes += 1
                 continue
             recordings_to_delete.append(f"{prefix_root}{recording_id}/")
             keys = list_objects_for_recording(s3_client, bucket, prefix_root, recording_id)
             keys_to_delete.extend(keys)
+
+    print(
+        f"Summary: total prefixes found={total_prefixes_found}, "
+        f"kept (allowlist)={kept_prefixes}, "
+        f"to delete={len(set(recordings_to_delete))}"
+    )
 
     if recordings_to_delete:
         print("Recordings to delete (prefixes):")
