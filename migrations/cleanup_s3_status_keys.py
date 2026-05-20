@@ -165,7 +165,7 @@ def main() -> None:
     else:
         print("\n[STATUS.JSON UPDATES] None needed")
 
-    # 2) S3 cleanup
+    # 2) S3 cleanup (delete S3 recordings not in allowlist)
     s3_client = boto3.client("s3", region_name=Config.S3_REGION)
     bucket = Config.S3_BUCKET_NAME
 
@@ -213,6 +213,38 @@ def main() -> None:
             print("✅ S3 deletions applied")
     else:
         print("No S3 objects to delete.")
+
+    # 3) Local cleanup (delete local recordings not present in S3)
+    print("\n[LOCAL CLEANUP]")
+    local_recordings = sorted([os.path.basename(path) for path in iter_recording_dirs(args.recordings_root)])
+
+    s3_recordings = set()
+    for prefix_root in prefix_roots:
+        s3_recordings.update(list_recording_prefixes(s3_client, bucket, prefix_root))
+
+    local_to_delete = [rec_id for rec_id in local_recordings if rec_id not in s3_recordings]
+
+    print(
+        f"Summary: local recordings={len(local_recordings)}, "
+        f"present in S3={len(s3_recordings)}, "
+        f"to delete locally={len(local_to_delete)}"
+    )
+
+    if local_to_delete:
+        print("Local recordings to delete:")
+        for rec_id in local_to_delete:
+            print(f"- {os.path.join(args.recordings_root, rec_id)}")
+        if not dry_run:
+            for rec_id in local_to_delete:
+                rec_path = os.path.join(args.recordings_root, rec_id)
+                try:
+                    import shutil
+                    shutil.rmtree(rec_path)
+                except Exception as exc:
+                    print(f"⚠️ Failed to delete {rec_path}: {exc}")
+            print("✅ Local deletions applied")
+    else:
+        print("No local recordings to delete.")
 
 
 if __name__ == "__main__":
