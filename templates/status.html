@@ -1031,7 +1031,7 @@
                         </div>
                     </div>
                     <div class="recording-header-right">
-                        <button class="qa-qc-btn" type="button" data-recording-id="{{ rec.id }}" title="Go to QA/QC (placeholder)">Go to QA/QC</button>
+                        <button class="qa-qc-btn" type="button" data-recording-id="{{ rec.id }}" title="Go to QA/QC" {% if rec.status != 'completed' %}disabled{% endif %}>Go to QA/QC</button>
                         <button class="rerun-btn" data-recording-id="{{ rec.id }}" title="Re-run pipeline for this recording (restart from step 0)">↻</button>
                         {% if is_local_mode %}
                         <button class="test-error-btn" data-recording-id="{{ rec.id }}" {% if rec.status == "processing" %}disabled{% endif %} title="{% if rec.status == 'processing' %}Cannot test while processing{% else %}Simulate pipeline error (test only){% endif %}">⚠️</button>
@@ -1561,6 +1561,7 @@
         function renderRecordingCardHTML(rec) {
             const badge = buildStatusBadge(rec);
             const isProcessing = rec.status === 'processing';
+            const isCompleted = rec.status === 'completed';
             const validationButton = renderValidationButton(rec); // Will be empty string if not completed
             
             const downloadLink = rec.status === 'completed'
@@ -1599,7 +1600,7 @@
                         </div>
                     </div>
                     <div class="recording-header-right">
-                        <button class="qa-qc-btn" type="button" data-recording-id="${escapeHtml(rec.id)}" title="Go to QA/QC (placeholder)">Go to QA/QC</button>
+                        <button class="qa-qc-btn" type="button" data-recording-id="${escapeHtml(rec.id)}" title="Go to QA/QC" ${!isCompleted ? 'disabled' : ''}>Go to QA/QC</button>
                         <button
                             class="rerun-btn"
                             data-recording-id="${escapeHtml(rec.id)}"
@@ -1748,6 +1749,9 @@
 
                 const validateBtn = event.target.closest('.validate-btn');
                 if (validateBtn) return handleValidateClick(event, validateBtn);
+
+                const qaqcBtn = event.target.closest('.qa-qc-btn');
+                if (qaqcBtn) return handleQaQcClick(event, qaqcBtn);
             });
 
             // 2. Délégation pour l'input des notes (change et blur/focusout)
@@ -1764,6 +1768,24 @@
                     handleNoteChange(event, event.target);
                 }
             });
+        }
+
+        function handleQaQcClick(event, qaqcBtn) {
+            const recordingId = qaqcBtn.dataset.recordingId;
+            const originalContent = qaqcBtn.innerHTML;
+            
+            // Show loading state
+            qaqcBtn.disabled = true;
+            qaqcBtn.innerHTML = '⏳ Loading...';
+            
+            // Redirect to the backend bridge route
+            window.location.href = `/status/qaqc/${encodeURIComponent(recordingId)}`;
+            
+            // Restore button after a delay in case the user comes back via browser back button
+            setTimeout(() => {
+                qaqcBtn.disabled = false;
+                qaqcBtn.innerHTML = originalContent;
+            }, 2000);
         }
 
         // Mise à jour des handlers pour accepter l'élément passé en paramètre
