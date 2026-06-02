@@ -1,1 +1,2 @@
-"""Database migrations package"""
+"""Migrations package"""
+from migrations.sign_app import *

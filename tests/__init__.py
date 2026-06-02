@@ -1,1 +1,1 @@
-"""Tests package for Traffic Sign ML Pipeline"""
+"""Tests package"""
