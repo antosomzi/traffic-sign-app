@@ -3,6 +3,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import joinedload, relationship, reconstructor
+from models.model_history import ModelHistory
 
 from .database import Base, get_session
 
@@ -104,6 +105,20 @@ class Recording(Base):
         """Get recording by ID"""
         with get_session() as session:
             return session.get(Recording, recording_id)
+        
+    @staticmethod
+    def update_model(recording_id):
+        with get_session() as session:
+            current_model = ModelHistory.get_current_active()
+            
+            if not current_model:
+                raise ValueError("Aucun modèle actif trouvé.")
+                
+            session.query(Recording).filter(Recording.id == recording_id).update({
+                "model_history_id": current_model.id  
+            })
+            session.commit()
+
     
     @staticmethod
     def get_by_organization(organization_id, user_ids=None, model_history_ids=None, sort_by='upload_date', sort_order='desc'):

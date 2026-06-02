@@ -7,6 +7,8 @@ import subprocess
 from flask import Blueprint, jsonify, abort
 from flask_login import login_required, current_user
 from config import Config
+from models.model_history import ModelHistory
+from models.recording import Recording
 from utils.file_utils import create_status_file
 from services.organization_service import OrganizationService
 
@@ -79,6 +81,8 @@ def rerun_recording(recording_id: str):
         "Pipeline restart requested. Re-running from step 0..."
     )
 
+
+
     try:
         run_pipeline_task.delay(recording_id)
     except Exception as exc:
@@ -86,6 +90,8 @@ def rerun_recording(recording_id: str):
             "success": False,
             "message": f"Failed to queue pipeline: {exc}"
         }), 500
+    Recording.update_model(recording_id)
+
 
     return jsonify({
         "success": True,

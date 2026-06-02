@@ -4,8 +4,31 @@ from typing import Optional
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, Index
 
 from models.database import Base, get_session
-from models.recording import parse_db_datetime
 
+
+def parse_db_datetime(value):
+    """
+    Parse datetime from SQLite database.
+    SQLite stores datetimes as strings, so we need to convert them.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            # Try ISO format first (2024-05-20 23:32:53)
+            return datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                # Try common SQLite format
+                return datetime.strptime(value, "%Y-%m-%d %H:%M:%S.%f")
+            except ValueError:
+                try:
+                    return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    return None
+    return None
 
 class ModelHistory(Base):
     __tablename__ = "model_history"
@@ -80,3 +103,4 @@ class ModelHistory(Base):
                     row.updated_date = parse_db_datetime(row.updated_date)
 
             return rows
+        
