@@ -9,11 +9,11 @@ import requests
 from flask_login import login_required, current_user
 from decorators.auth_decorators import auth_required
 from config import Config
-from services.organization_service import OrganizationService
-from services.signs_service import import_signs_for_recording, delete_signs_for_recording
-from models.user import User
-from models.model_history import ModelHistory
-from models.recording import Recording
+from services.sign_app.organization_service import OrganizationService
+from services.sign_app.signs_service import import_signs_for_recording, delete_signs_for_recording
+from models.sign_app.user import User
+from models.sign_app.model_history import ModelHistory
+from models.sign_app.recording import Recording
 
 status_bp = Blueprint("status", __name__)
 

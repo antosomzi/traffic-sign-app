@@ -15,7 +15,7 @@ import sqlite3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import Config
-from models.database import get_db_path, init_db
+from models.sign_app.database import get_db_path, init_db
 
 
 def migrate_status_files():

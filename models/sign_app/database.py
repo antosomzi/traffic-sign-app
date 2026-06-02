@@ -13,7 +13,8 @@ def get_db_path():
     if os.path.exists("/home/ec2-user"):
         return "/home/ec2-user/app.db"
     else:
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # We are in models/sign_app/database.py, so we need to go up 3 levels to reach the project root
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         return os.path.join(base_path, "app.db")
 
 

@@ -8,9 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from config import Config
-from models.recording import Recording
-from models.user import User
-from services.redis_service import RedisProgressService
+from models.sign_app.recording import Recording
+from models.sign_app.user import User
+from services.sign_app.redis_service import RedisProgressService
 from config import redis_client
 
 

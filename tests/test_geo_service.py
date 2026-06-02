@@ -6,7 +6,7 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from services.geo_service import GeoService
+from services.sign_app.geo_service import GeoService
 
 
 class TestGeoService:

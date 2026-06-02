@@ -5,7 +5,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, func, Index
 
-from models.database import Base, get_session
+from models.sign_app.database import Base, get_session
 
 
 class APIKey(Base):

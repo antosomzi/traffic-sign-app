@@ -4,8 +4,8 @@ import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import org_owner_required
-from models.user import User
-from models.organization import Organization
+from models.sign_app.user import User
+from models.sign_app.organization import Organization
 
 org_owner_bp = Blueprint('org_owner', __name__, url_prefix='/org_owner')
 

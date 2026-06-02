@@ -5,10 +5,10 @@ import json
 import os
 import shutil
 import zipfile
-from services.s3_service import S3VideoService, find_video_in_recording
-from services.video_encoding_service import VideoEncodingError, encode_video_cfr_semi_all_intra
-from services.redis_service import RedisProgressService
-from services.validation_service import ValidationService
+from services.sign_app.s3_service import S3VideoService, find_video_in_recording
+from services.sign_app.video_encoding_service import VideoEncodingError, encode_video_cfr_semi_all_intra
+from services.sign_app.redis_service import RedisProgressService
+from services.sign_app.validation_service import ValidationService
 from utils.file_utils import compute_folder_size, create_status_file
 from utils.cleanup_utils import clean_macos_files
 

@@ -7,10 +7,10 @@ import subprocess
 from flask import Blueprint, jsonify, abort
 from flask_login import login_required, current_user
 from config import Config
-from models.model_history import ModelHistory
-from models.recording import Recording
+from models.sign_app.model_history import ModelHistory
+from models.sign_app.recording import Recording
 from utils.file_utils import create_status_file
-from services.organization_service import OrganizationService
+from services.sign_app.organization_service import OrganizationService
 
 try:
     from pipeline.celery_tasks import run_pipeline_task
@@ -85,12 +85,13 @@ def rerun_recording(recording_id: str):
 
     try:
         run_pipeline_task.delay(recording_id)
+        Recording.update_model(recording_id)
+
     except Exception as exc:
         return jsonify({
             "success": False,
             "message": f"Failed to queue pipeline: {exc}"
         }), 500
-    Recording.update_model(recording_id)
 
 
     return jsonify({

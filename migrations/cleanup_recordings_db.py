@@ -10,7 +10,7 @@ from typing import List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.recording import Recording
+from models.sign_app.recording import Recording
 
 
 RECORDING_IDS: List[str] = [

@@ -11,7 +11,7 @@ import sys
 # Add parent directory to path to import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.database import get_db
+from models.sign_app.database import get_db
 
 
 def migrate():

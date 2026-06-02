@@ -3,9 +3,9 @@
 from functools import wraps
 from flask import redirect, url_for, flash, request, jsonify
 from flask_login import current_user, login_user
-from models.auth_token import AuthToken
-from models.api_key import APIKey
-from models.user import User
+from models.sign_app.auth_token import AuthToken
+from models.sign_app.api_key import APIKey
+from models.sign_app.user import User
 
 
 def login_required(f):

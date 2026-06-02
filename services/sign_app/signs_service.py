@@ -2,10 +2,10 @@
 
 import os
 import csv
-from models.sign import Sign
+from models.sign_app.sign import Sign
 from config import Config
 from pipeline.post_processing import get_merged_signs_csv_path
-from services.route_filtering_service import get_best_signs_csv_path
+from services.sign_app.route_filtering_service import get_best_signs_csv_path
 
 
 def parse_signs_csv(recording_id):

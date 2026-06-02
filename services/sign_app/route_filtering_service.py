@@ -42,12 +42,13 @@ def _get_org_routes_path(org_id: int) -> str:
 def _get_org_id_for_recording(recording_id: str) -> Optional[int]:
     """Look up the organisation that owns *recording_id*."""
     import sys
-    APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Go up 3 levels to reach the project root from services/sign_app/route_filtering_service.py
+    APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if APP_DIR not in sys.path:
         sys.path.insert(0, APP_DIR)
         
     try:
-        from models.recording import Recording
+        from models.sign_app.recording import Recording
         rec = Recording.get_by_id(recording_id)
         if rec:
             return rec.organization_id

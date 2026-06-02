@@ -8,7 +8,7 @@ from datetime import datetime
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.database import get_db, get_db_path
+from models.sign_app.database import get_db, get_db_path
 from config import Config
 
 

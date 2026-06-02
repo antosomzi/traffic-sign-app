@@ -3,11 +3,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import admin_required
-from models.model_history import ModelHistory
-from models.organization import Organization
-from models.user import User
-from models.api_key import APIKey
-from services.redis_service import RedisProgressService
+from models.sign_app.model_history import ModelHistory
+from models.sign_app.organization import Organization
+from models.sign_app.user import User
+from models.sign_app.api_key import APIKey
+from services.sign_app.redis_service import RedisProgressService
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 

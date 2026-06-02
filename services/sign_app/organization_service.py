@@ -1,8 +1,8 @@
 """Organization service for multi-tenancy logic"""
 
-from models.model_history import ModelHistory
-from models.recording import Recording
-from models.organization import Organization
+from models.sign_app.model_history import ModelHistory
+from models.sign_app.recording import Recording
+from models.sign_app.organization import Organization
 
 
 class OrganizationService:
@@ -112,7 +112,7 @@ class OrganizationService:
             recording_id: Recording ID string
         """
         # Delete associated signs first (explicit delete for SQLite compatibility)
-        from models.sign import Sign
+        from models.sign_app.sign import Sign
         Sign.delete_by_recording(recording_id)
         
         # Then delete the recording

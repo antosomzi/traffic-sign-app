@@ -8,9 +8,9 @@ from flask import Blueprint, render_template, request, jsonify, current_app
 from flask_login import login_required, current_user
 from decorators.auth_decorators import auth_required
 from config import Config
-from services.redis_service import RedisProgressService
-from services.extraction_service import ExtractionService
-from services.organization_service import OrganizationService
+from services.sign_app.redis_service import RedisProgressService
+from services.sign_app.extraction_service import ExtractionService
+from services.sign_app.organization_service import OrganizationService
 from utils.file_utils import allowed_file
 
 # Check if Celery is available

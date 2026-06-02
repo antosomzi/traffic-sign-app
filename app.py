@@ -13,10 +13,11 @@ import os
 from flask import Flask, redirect, url_for
 from flask_login import LoginManager
 from config import Config
-from routes import upload_bp, status_bp, download_bp, delete_bp, rerun_bp
-from routes.test_routes import test_bp
-from routes.auth_routes import auth_bp
-from models.user import User
+from routes import (
+    auth_bp, upload_bp, status_bp, download_bp, delete_bp, rerun_bp,
+    admin_bp, org_owner_bp, map_bp, api_bp, test_bp
+)
+from models.sign_app.user import User
 
 
 def create_app(config_class=Config):
@@ -54,21 +55,9 @@ def create_app(config_class=Config):
     app.register_blueprint(download_bp)
     app.register_blueprint(delete_bp)
     app.register_blueprint(rerun_bp)
-    
-    # Import and register admin blueprint
-    from routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
-    
-    # Import and register organization owner blueprint
-    from routes.org_owner_routes import org_owner_bp
     app.register_blueprint(org_owner_bp)
-    
-    # Import and register map blueprint (GPS routes, signs)
-    from routes.map_routes import map_bp
     app.register_blueprint(map_bp)
-    
-    # Import and register mobile auth blueprint
-    from routes.mobile_auth_routes import api_bp
     app.register_blueprint(api_bp)
     
     # Register test routes (only active in local mode)
@@ -83,7 +72,7 @@ def create_app(config_class=Config):
     # Context processor for global variables
     @app.context_processor
     def inject_global_vars():
-        from services.redis_service import RedisProgressService
+        from services.sign_app.redis_service import RedisProgressService
         return {
             'system_maintenance_active': RedisProgressService.get_maintenance_mode()
         }

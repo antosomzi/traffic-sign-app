@@ -9,8 +9,8 @@ This file only contains mobile-specific login/logout endpoints
 from flask import Blueprint, request, jsonify
 from decorators.auth_decorators import login_required
 from flask_login import current_user
-from models.user import User
-from models.auth_token import AuthToken
+from models.sign_app.user import User
+from models.sign_app.auth_token import AuthToken
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 

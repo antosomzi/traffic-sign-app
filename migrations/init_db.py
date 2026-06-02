@@ -9,10 +9,10 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.database import init_db, get_db_path
-from models.organization import Organization
-from models.user import User
-from models.recording import Recording
+from models.sign_app.database import init_db, get_db_path
+from models.sign_app.organization import Organization
+from models.sign_app.user import User
+from models.sign_app.recording import Recording
 from config import Config
 
 

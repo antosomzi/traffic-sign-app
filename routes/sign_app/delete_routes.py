@@ -2,8 +2,8 @@
 
 from flask import Blueprint, jsonify, abort
 from flask_login import login_required, current_user
-from services.deletion_service import delete_recording
-from services.organization_service import OrganizationService
+from services.sign_app.deletion_service import delete_recording
+from services.sign_app.organization_service import OrganizationService
 
 delete_bp = Blueprint("delete", __name__)
 

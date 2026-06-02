@@ -3,7 +3,7 @@
 from flask import Blueprint, send_file, abort, request, flash, redirect, url_for
 from flask_login import login_required, current_user
 from decorators.auth_decorators import api_key_required
-from services.download_service import (
+from services.sign_app.download_service import (
     get_recording_folder,
     get_json_file,
     find_gps_files,
@@ -12,7 +12,7 @@ from services.download_service import (
     create_full_results_zip,
     create_multi_recordings_csv_zip
 )
-from services.organization_service import OrganizationService
+from services.sign_app.organization_service import OrganizationService
 from datetime import datetime
 
 download_bp = Blueprint("download", __name__)

@@ -14,10 +14,10 @@ if APP_DIR not in sys.path:
 from celery_app import celery
 from pipeline.gpu.runner import start_and_run_pipeline_ssh
 from pipeline.post_processing import generate_merged_signs_csv
-from services.confidence import add_confidence_to_merged_signs_csv
-from services.filtered_output_json import filter_output_json
-from services.route_filtering_service import filter_signs_by_org_routes
-from services.s3_service import S3VideoService, get_camera_folder
+from services.sign_app.confidence import add_confidence_to_merged_signs_csv
+from services.sign_app.filtered_output_json import filter_output_json
+from services.sign_app.route_filtering_service import filter_signs_by_org_routes
+from services.sign_app.s3_service import S3VideoService, get_camera_folder
 
 
 # Configuration - Auto-detect environment (EC2 vs local)

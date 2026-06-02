@@ -13,7 +13,7 @@ from botocore.exceptions import WaiterError
 
 from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTANCE_ID
 from pipeline.gpu.diagnostics import capture_instance_diagnostics
-from services.s3_service import S3VideoService, find_video_in_recording
+from services.sign_app.s3_service import S3VideoService, find_video_in_recording
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 

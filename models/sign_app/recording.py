@@ -3,7 +3,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import joinedload, relationship, reconstructor
-from models.model_history import ModelHistory
+from models.sign_app.model_history import ModelHistory
 
 from .database import Base, get_session
 

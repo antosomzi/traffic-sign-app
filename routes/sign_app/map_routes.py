@@ -6,9 +6,9 @@ These routes are accessible to all authenticated users in their organization.
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import current_user
 from decorators.auth_decorators import login_required
-from models.organization import Organization
-from services.geo_service import GeoService
-from services.signs_service import get_signs_geojson, get_filter_options
+from models.sign_app.organization import Organization
+from services.sign_app.geo_service import GeoService
+from services.sign_app.signs_service import get_signs_geojson, get_filter_options
 
 map_bp = Blueprint('map', __name__, url_prefix='/map')
 

@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from config import Config
-from services.filtered_output_json import filter_output_json
+from services.sign_app.filtered_output_json import filter_output_json
 
 
 def _load_sorted_cluster_ids(output_json_path: Path) -> list[int]:

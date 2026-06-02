@@ -29,7 +29,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import Config
-from services.s3_service import S3VideoService, find_video_in_recording
+from services.sign_app.s3_service import S3VideoService, find_video_in_recording
 
 
 def get_s3_key_from_status(recording_path: str) -> str | None:

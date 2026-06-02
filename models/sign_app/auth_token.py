@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func, Index
 
-from models.database import Base, get_session
+from models.sign_app.database import Base, get_session
 
 
 class AuthToken(Base):

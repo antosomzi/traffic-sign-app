@@ -58,7 +58,7 @@ def delete_recording(recording_id: str) -> Dict[str, any]:
                     s3_key = status_data.get("video_s3_key")
                     
                     if s3_key:
-                        from services.s3_service import S3VideoService
+                        from services.sign_app.s3_service import S3VideoService
                         s3_service = S3VideoService()
                         s3_service.delete_video(s3_key)
                         print(f"[DELETE] Video deleted from S3: {s3_key}")

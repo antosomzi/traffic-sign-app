@@ -8,9 +8,9 @@ from typing import List, Optional
 from flask import abort
 from config import Config
 from pipeline.post_processing import get_merged_signs_csv_path
-from services.route_filtering_service import get_best_signs_csv_path
-from models.recording import Recording
-from models.organization import Organization
+from services.sign_app.route_filtering_service import get_best_signs_csv_path
+from models.sign_app.recording import Recording
+from models.sign_app.organization import Organization
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -83,7 +83,7 @@ def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
             
             s3_key = status_data.get('video_s3_key')
             if s3_key:
-                from services.s3_service import S3VideoService, get_camera_folder
+                from services.sign_app.s3_service import S3VideoService, get_camera_folder
                 s3_service = S3VideoService()
                 
                 # Find camera folder for download destination
