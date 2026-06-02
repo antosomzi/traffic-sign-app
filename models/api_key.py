@@ -3,11 +3,27 @@
 import secrets
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from models.database import get_db
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, func, Index
+
+from models.database import Base, get_session
 
 
-class APIKey:
+class APIKey(Base):
     """Model for API keys used in B2B authentication"""
+
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String)
+    key_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
+    expires_at = Column(DateTime)
+    revoked = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("idx_api_keys_user_id", "user_id"),
+    )
 
     @staticmethod
     def create(user_id, name=None, expires_days=None):
@@ -34,15 +50,12 @@ class APIKey:
             from datetime import timedelta
             expires_at = datetime.now() + timedelta(days=expires_days)
 
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO api_keys (user_id, name, key_hash, expires_at)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, name, key_hash, expires_at))
-            api_key_id = cursor.lastrowid
-
-        return api_key_id, plain_key
+        with get_session() as session:
+            api_key = APIKey(user_id=user_id, name=name, key_hash=key_hash, expires_at=expires_at)
+            session.add(api_key)
+            session.flush()
+            session.refresh(api_key)
+            return api_key.id, plain_key
 
     @staticmethod
     def get_by_key(plain_key):
@@ -54,33 +67,22 @@ class APIKey:
         Returns:
             user_id if API key is valid, None otherwise
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            # Get all API keys (we need to check each one since we can't query by hashed value)
-            cursor.execute("""
-                SELECT id, user_id, key_hash, expires_at, revoked
-                FROM api_keys
-            """)
+        with get_session() as session:
+            keys = session.query(APIKey).filter(APIKey.revoked.is_(False)).all()
 
-            rows = cursor.fetchall()
-            if not rows:
+            if not keys:
                 return None
 
-            # Check each key
-            for row in rows:
-                key_id, user_id, key_hash, expires_at, revoked = row
+            for key in keys:
+                expires_at = key.expires_at
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at)
 
-                # Check if revoked (convert to int for safety)
-                if int(revoked) == 1:
+                if expires_at and datetime.now() > expires_at:
                     continue
 
-                # Check if expired
-                if expires_at and datetime.now() > datetime.fromisoformat(expires_at):
-                    continue
-
-                # Verify the hash
-                if check_password_hash(key_hash, plain_key):
-                    return user_id
+                if check_password_hash(key.key_hash, plain_key):
+                    return key.user_id
 
             return None
 
@@ -94,23 +96,21 @@ class APIKey:
         Returns:
             list: List of API key metadata (id, name, created_at, expires_at, revoked)
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, name, created_at, expires_at, revoked
-                FROM api_keys
-                WHERE user_id = ?
-                ORDER BY created_at DESC
-            """, (user_id,))
+        with get_session() as session:
+            rows = (
+                session.query(APIKey)
+                .filter(APIKey.user_id == user_id)
+                .order_by(APIKey.created_at.desc())
+                .all()
+            )
 
-            rows = cursor.fetchall()
             return [
                 {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "created_at": row["created_at"],
-                    "expires_at": row["expires_at"],
-                    "revoked": bool(row["revoked"])
+                    "id": row.id,
+                    "name": row.name,
+                    "created_at": row.created_at,
+                    "expires_at": row.expires_at,
+                    "revoked": bool(row.revoked)
                 }
                 for row in rows
             ]
@@ -122,10 +122,8 @@ class APIKey:
         Args:
             api_key_id: API key ID to delete
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM api_keys WHERE id = ?", (api_key_id,))
-            conn.commit()
+        with get_session() as session:
+            session.query(APIKey).filter(APIKey.id == api_key_id).delete(synchronize_session=False)
 
     @staticmethod
     def revoke(api_key_id):
@@ -134,10 +132,8 @@ class APIKey:
         Args:
             api_key_id: API key ID to revoke
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE api_keys SET revoked = 1 WHERE id = ?", (api_key_id,))
-            conn.commit()
+        with get_session() as session:
+            session.query(APIKey).filter(APIKey.id == api_key_id).update({"revoked": True})
 
     @staticmethod
     def delete_all_for_user(user_id):
@@ -146,7 +142,5 @@ class APIKey:
         Args:
             user_id: User ID to delete all keys for
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM api_keys WHERE user_id = ?", (user_id,))
-            conn.commit()
+        with get_session() as session:
+            session.query(APIKey).filter(APIKey.user_id == user_id).delete(synchronize_session=False)

@@ -1,8 +1,11 @@
-"""SQLite database connection management"""
+"""Database connection management (SQLAlchemy + SQLite)"""
 
-import sqlite3
 import os
+import sqlite3
 from contextlib import contextmanager
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 
 def get_db_path():
@@ -12,6 +15,29 @@ def get_db_path():
     else:
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(base_path, "app.db")
+
+
+DATABASE_URL = f"sqlite:///{get_db_path()}"
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+Base = declarative_base()
+
+
+@contextmanager
+def get_session():
+    """Context manager for SQLAlchemy sessions"""
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 @contextmanager
@@ -32,131 +58,8 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
-    db_path = get_db_path()
-    
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Create organizations table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS organizations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    # Create users table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            name TEXT NOT NULL,
-            organization_id INTEGER NOT NULL,
-            is_admin INTEGER DEFAULT 0,
-            is_org_owner INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (organization_id) REFERENCES organizations(id)
-        )
-    """)
+    from . import organization, user, recording, sign, auth_token, api_key, model_history  # noqa: F401
 
-    # Create model_history table (for ML model version tracking)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS model_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            version_name TEXT NOT NULL,
-            updated_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            is_active INTEGER DEFAULT 0
-        )
-    """)
+    Base.metadata.create_all(bind=engine)
 
-    # Create index for active model lookup
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_model_history_is_active
-        ON model_history(is_active)
-    """)
-    
-    # Create recordings table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS recordings (
-            id TEXT PRIMARY KEY,
-            organization_id INTEGER NOT NULL,
-            model_history_id INTEGER,
-            upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (organization_id) REFERENCES organizations(id),
-            FOREIGN KEY (model_history_id) REFERENCES model_history(id)
-        )
-    """)
-    
-    # Create auth_tokens table (for mobile authentication)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS auth_tokens (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            token TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    """)
-    
-    # Create indexes for auth_tokens
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_auth_tokens_token 
-        ON auth_tokens(token)
-    """)
-    
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_id 
-        ON auth_tokens(user_id)
-    """)
-    
-    # Create signs table (for storing detected traffic signs)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS signs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            recording_id TEXT NOT NULL,
-            mutcd_code TEXT NOT NULL,
-            latitude REAL NOT NULL,
-            longitude REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
-        )
-    """)
-    
-    # Create indexes for signs table
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_signs_recording_id 
-        ON signs(recording_id)
-    """)
-    
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_signs_mutcd_code
-        ON signs(mutcd_code)
-    """)
-
-    # Create api_keys table (for B2B API authentication)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS api_keys (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            name TEXT,
-            key_hash TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP,
-            revoked INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-    """)
-
-    # Create indexes for api_keys
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_api_keys_user_id
-        ON api_keys(user_id)
-    """)
-
-    conn.commit()
-    conn.close()
-
-    print(f"✅ Database initialized at: {db_path}")
+    print(f"✅ Database initialized at: {get_db_path()}")

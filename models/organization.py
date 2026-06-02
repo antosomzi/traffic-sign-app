@@ -1,7 +1,9 @@
 """Organization model"""
 
 import os
-from .database import get_db
+from sqlalchemy import Column, Integer, String, DateTime, func
+
+from .database import Base, get_session
 
 
 def _get_org_routes_dir(org_id):
@@ -10,123 +12,70 @@ def _get_org_routes_dir(org_id):
     return os.path.join(Config.ORG_ROUTES_FOLDER, str(org_id))
 
 
-class Organization:
+class Organization(Base):
     """Organization entity"""
-    
-    def __init__(self, id, name, created_at=None):
-        self.id = id
-        self.name = name
-        self.created_at = created_at
+
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
     
     @staticmethod
     def create(name):
         """Create a new organization"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO organizations (name) VALUES (?)",
-                (name,)
-            )
-            org_id = cursor.lastrowid
-        return Organization.get_by_id(org_id)
+        with get_session() as session:
+            organization = Organization(name=name)
+            session.add(organization)
+            session.flush()
+            session.refresh(organization)
+            return organization
     
     @staticmethod
     def get_by_id(org_id):
         """Get organization by ID"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, created_at FROM organizations WHERE id = ?",
-                (org_id,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return Organization(
-                id=row['id'],
-                name=row['name'],
-                created_at=row['created_at']
-            )
-        return None
+        with get_session() as session:
+            return session.get(Organization, org_id)
     
     @staticmethod
     def get_by_name(name):
         """Get organization by name"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, created_at FROM organizations WHERE name = ?",
-                (name,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return Organization(
-                id=row['id'],
-                name=row['name'],
-                created_at=row['created_at']
-            )
-        return None
+        with get_session() as session:
+            return session.query(Organization).filter(Organization.name == name).first()
     
     @staticmethod
     def get_all():
         """Get all organizations"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, name, created_at FROM organizations ORDER BY name"
-            )
-            rows = cursor.fetchall()
-        
-        return [
-            Organization(
-                id=row['id'],
-                name=row['name'],
-                created_at=row['created_at']
-            )
-            for row in rows
-        ]
+        with get_session() as session:
+            return session.query(Organization).order_by(Organization.name).all()
     
     def count_recordings(self):
         """Count recordings for this organization"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM recordings WHERE organization_id = ?",
-                (self.id,)
-            )
-            row = cursor.fetchone()
-        return row['count'] if row else 0
+        from .recording import Recording
+
+        with get_session() as session:
+            return session.query(func.count(Recording.id)).filter(Recording.organization_id == self.id).scalar() or 0
     
     def count_users(self):
         """Count users in this organization"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM users WHERE organization_id = ?",
-                (self.id,)
-            )
-            row = cursor.fetchone()
-        return row['count'] if row else 0
+        from .user import User
+
+        with get_session() as session:
+            return session.query(func.count(User.id)).filter(User.organization_id == self.id).scalar() or 0
     
     def update_name(self, name):
         """Update organization name"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE organizations SET name = ? WHERE id = ?",
-                (name, self.id)
-            )
+        with get_session() as session:
+            session.query(Organization).filter(Organization.id == self.id).update({"name": name})
         self.name = name
     
     def delete(self):
         """Delete organization and all its users"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            # Delete all users in this organization first
-            cursor.execute("DELETE FROM users WHERE organization_id = ?", (self.id,))
-            # Then delete the organization
-            cursor.execute("DELETE FROM organizations WHERE id = ?", (self.id,))
+        from .user import User
+
+        with get_session() as session:
+            session.query(User).filter(User.organization_id == self.id).delete(synchronize_session=False)
+            session.query(Organization).filter(Organization.id == self.id).delete(synchronize_session=False)
 
     # -----------------------------------------------------------------
     # Organization Routes GeoJSON

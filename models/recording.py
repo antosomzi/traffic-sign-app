@@ -1,7 +1,10 @@
 """Recording model for multi-tenancy"""
 
 from datetime import datetime
-from .database import get_db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
+from sqlalchemy.orm import joinedload, relationship, reconstructor
+
+from .database import Base, get_session
 
 
 def parse_recording_date(recording_id):
@@ -46,21 +49,28 @@ def parse_db_datetime(value):
     return None
 
 
-class Recording:
+class Recording(Base):
     """Recording entity linking recording_id to organization and user"""
+
+    __tablename__ = "recordings"
+
+    id = Column(String, primary_key=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    model_history_id = Column(Integer, ForeignKey("model_history.id"), nullable=True)
+    upload_date = Column(DateTime, server_default=func.current_timestamp())
+    recording_date = Column(DateTime)
+    note = Column(Text)
+
+    user_rel = relationship("User", foreign_keys=[user_id], viewonly=True)
+    model_history_rel = relationship("ModelHistory", foreign_keys=[model_history_id], viewonly=True)
     
-    def __init__(self, id, organization_id, user_id=None, upload_date=None, recording_date=None, note=None, uploader_name=None, model_history_id=None, model_history_name=None):
-        self.id = id  # recording_id (e.g., "2024_05_20_23_32_53_415")
-        self.organization_id = organization_id
-        self.user_id = user_id
-        self.note = note
-        self.model_history_id = model_history_id
-        self.model_history_name = model_history_name
-        # Parse dates from strings if needed
-        self.upload_date = parse_db_datetime(upload_date)
-        self.recording_date = parse_db_datetime(recording_date)
+    @reconstructor
+    def init_on_load(self):
+        """Initialize transient fields after loading from DB."""
         self._user = None
-        self.uploader_name = uploader_name
+        self.uploader_name = None
+        self.model_history_name = None
 
     @property
     def user(self):
@@ -75,39 +85,25 @@ class Recording:
     def create(recording_id, organization_id, user_id=None, model_history_id=None):
         """Create a new recording entry"""
         recording_date = parse_recording_date(recording_id)
-        
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO recordings (id, organization_id, user_id, model_history_id, recording_date) 
-                   VALUES (?, ?, ?, ?, ?)""",
-                (recording_id, organization_id, user_id, model_history_id, recording_date)
+
+        with get_session() as session:
+            recording = Recording(
+                id=recording_id,
+                organization_id=organization_id,
+                user_id=user_id,
+                model_history_id=model_history_id,
+                recording_date=recording_date
             )
-        return Recording.get_by_id(recording_id)
+            session.add(recording)
+            session.flush()
+            session.refresh(recording)
+            return recording
     
     @staticmethod
     def get_by_id(recording_id):
         """Get recording by ID"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                     """SELECT id, organization_id, user_id, model_history_id, upload_date, recording_date, note 
-                   FROM recordings WHERE id = ?""",
-                (recording_id,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return Recording(
-                id=row['id'],
-                organization_id=row['organization_id'],
-                user_id=row['user_id'],
-                model_history_id=row['model_history_id'],
-                upload_date=row['upload_date'],
-                recording_date=row['recording_date'],
-                note=row['note']
-            )
-        return None
+        with get_session() as session:
+            return session.get(Recording, recording_id)
     
     @staticmethod
     def get_by_organization(organization_id, user_ids=None, model_history_ids=None, sort_by='upload_date', sort_order='desc'):
@@ -130,53 +126,31 @@ class Recording:
         
         sort_order = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
         
-        with get_db() as conn:
-            cursor = conn.cursor()
-            # Build query
-            query = f"""
-                SELECT 
-                    r.id, r.organization_id, r.user_id, r.model_history_id, r.upload_date, 
-                    r.recording_date, r.note, u.name as uploader_name,
-                    m.version_name as model_history_name
-                FROM recordings r
-                LEFT JOIN users u ON r.user_id = u.id
-                LEFT JOIN model_history m ON r.model_history_id = m.id
-                WHERE r.organization_id = ?
-            """
-            params = [organization_id]
-            
-            # Add user filter if provided
-            if user_ids:
-                placeholders = ','.join(['?' for _ in user_ids])
-                query += f" AND user_id IN ({placeholders})"
-                params.extend(user_ids)
+        sort_column = Recording.upload_date if sort_by == 'upload_date' else Recording.recording_date
+        sort_column = sort_column.desc() if sort_order == 'DESC' else sort_column.asc()
 
-            # Add model filter if provided
-            if model_history_ids:
-                placeholders = ','.join(['?' for _ in model_history_ids])
-                query += f" AND r.model_history_id IN ({placeholders})"
-                params.extend(model_history_ids)
-            
-            # Add sorting
-            query += f" ORDER BY {sort_by} {sort_order}"
-            
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-        
-        return [
-            Recording(
-                id=row['id'],
-                organization_id=row['organization_id'],
-                user_id=row['user_id'],
-                model_history_id=row['model_history_id'],
-                model_history_name=row['model_history_name'],
-                upload_date=row['upload_date'],
-                recording_date=row['recording_date'],
-                note=row['note'],
-                uploader_name=row['uploader_name']
+        with get_session() as session:
+            query = (
+                session.query(Recording)
+                .options(joinedload(Recording.user_rel), joinedload(Recording.model_history_rel))
+                .filter(Recording.organization_id == organization_id)
             )
-            for row in rows
-        ]
+
+            if user_ids:
+                query = query.filter(Recording.user_id.in_(user_ids))
+
+            if model_history_ids:
+                query = query.filter(Recording.model_history_id.in_(model_history_ids))
+
+            recordings = query.order_by(sort_column).all()
+
+            for recording in recordings:
+                recording.uploader_name = recording.user_rel.name if recording.user_rel else None
+                recording.model_history_name = (
+                    recording.model_history_rel.version_name if recording.model_history_rel else None
+                )
+
+            return recordings
     
     @staticmethod
     def get_users_with_recordings(organization_id):
@@ -187,40 +161,32 @@ class Recording:
         Returns:
             List of dicts with user_id and user_name
         """
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT DISTINCT r.user_id, u.name as user_name
-                FROM recordings r
-                LEFT JOIN users u ON r.user_id = u.id
-                WHERE r.organization_id = ? AND r.user_id IS NOT NULL
-                ORDER BY u.name
-            """, (organization_id,))
-            rows = cursor.fetchall()
-        
-        return [{'id': row['user_id'], 'name': row['user_name'] or 'Unknown'} for row in rows]
+        from .user import User
+
+        with get_session() as session:
+            rows = (
+                session.query(User.id, User.name)
+                .join(Recording, Recording.user_id == User.id)
+                .filter(Recording.organization_id == organization_id)
+                .filter(Recording.user_id.isnot(None))
+                .distinct()
+                .order_by(User.name)
+                .all()
+            )
+
+        return [{'id': row.id, 'name': row.name or 'Unknown'} for row in rows]
     
     @staticmethod
     def delete(recording_id):
         """Delete a recording entry"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "DELETE FROM recordings WHERE id = ?",
-                (recording_id,)
-            )
+        with get_session() as session:
+            session.query(Recording).filter(Recording.id == recording_id).delete(synchronize_session=False)
     
     @staticmethod
     def exists(recording_id):
         """Check if recording exists"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) as count FROM recordings WHERE id = ?",
-                (recording_id,)
-            )
-            row = cursor.fetchone()
-        return row['count'] > 0 if row else False
+        with get_session() as session:
+            return session.query(Recording.id).filter(Recording.id == recording_id).first() is not None
     
     def belongs_to_organization(self, organization_id):
         """Check if recording belongs to specific organization"""
@@ -229,10 +195,6 @@ class Recording:
 
     def update_note(self, new_note):
         """Update the note for this recording"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE recordings SET note = ? WHERE id = ?",
-                (new_note, self.id)
-            )
+        with get_session() as session:
+            session.query(Recording).filter(Recording.id == self.id).update({"note": new_note})
         self.note = new_note

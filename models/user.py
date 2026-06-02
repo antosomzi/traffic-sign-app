@@ -2,28 +2,30 @@
 
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from .database import get_db
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, func
+
+from .database import Base, get_session
 from .organization import Organization
 
 
-class User(UserMixin):
+class User(Base, UserMixin):
     """User entity with Flask-Login support"""
-    
-    def __init__(self, id, email, password_hash, name, organization_id, is_admin, is_org_owner=False, created_at=None):
-        self.id = id
-        self.email = email
-        self.password_hash = password_hash
-        self.name = name
-        self.organization_id = organization_id
-        self.is_admin = bool(is_admin)
-        self.is_org_owner = bool(is_org_owner)
-        self.created_at = created_at
-        self._organization = None
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    is_admin = Column(Boolean, default=False)
+    is_org_owner = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
     
     @property
     def organization(self):
         """Lazy load organization"""
-        if self._organization is None:
+        if getattr(self, "_organization", None) is None:
             self._organization = Organization.get_by_id(self.organization_id)
         return self._organization
     
@@ -35,157 +37,69 @@ class User(UserMixin):
     def create(email, password, name, organization_id, is_admin=False, is_org_owner=False):
         """Create a new user"""
         password_hash = generate_password_hash(password)
-        
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT INTO users (email, password_hash, name, organization_id, is_admin, is_org_owner)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (email, password_hash, name, organization_id, 1 if is_admin else 0, 1 if is_org_owner else 0)
+
+        with get_session() as session:
+            user = User(
+                email=email,
+                password_hash=password_hash,
+                name=name,
+                organization_id=organization_id,
+                is_admin=bool(is_admin),
+                is_org_owner=bool(is_org_owner)
             )
-            user_id = cursor.lastrowid
-        
-        return User.get_by_id(user_id)
+            session.add(user)
+            session.flush()
+            session.refresh(user)
+            return user
     
     @staticmethod
     def get_by_id(user_id):
         """Get user by ID (required by Flask-Login)"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """SELECT id, email, password_hash, name, organization_id, is_admin, is_org_owner, created_at
-                   FROM users WHERE id = ?""",
-                (user_id,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return User(
-                id=row['id'],
-                email=row['email'],
-                password_hash=row['password_hash'],
-                name=row['name'],
-                organization_id=row['organization_id'],
-                is_admin=row['is_admin'],
-                is_org_owner=row['is_org_owner'],
-                created_at=row['created_at']
-            )
-        return None
+        with get_session() as session:
+            return session.get(User, user_id)
     
     @staticmethod
     def get_by_email(email):
         """Get user by email"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """SELECT id, email, password_hash, name, organization_id, is_admin, is_org_owner, created_at
-                   FROM users WHERE email = ?""",
-                (email,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return User(
-                id=row['id'],
-                email=row['email'],
-                password_hash=row['password_hash'],
-                name=row['name'],
-                organization_id=row['organization_id'],
-                is_admin=row['is_admin'],
-                is_org_owner=row['is_org_owner'],
-                created_at=row['created_at']
-            )
-        return None
+        with get_session() as session:
+            return session.query(User).filter(User.email == email).first()
     
     @staticmethod
     def get_all():
         """Get all users"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """SELECT id, email, password_hash, name, organization_id, is_admin, is_org_owner, created_at
-                   FROM users ORDER BY created_at DESC"""
-            )
-            rows = cursor.fetchall()
-        
-        return [
-            User(
-                id=row['id'],
-                email=row['email'],
-                password_hash=row['password_hash'],
-                name=row['name'],
-                organization_id=row['organization_id'],
-                is_admin=row['is_admin'],
-                is_org_owner=row['is_org_owner'],
-                created_at=row['created_at']
-            )
-            for row in rows
-        ]
+        with get_session() as session:
+            return session.query(User).order_by(User.created_at.desc()).all()
     
     @staticmethod
     def get_by_organization(organization_id):
         """Get all users in an organization"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """SELECT id, email, password_hash, name, organization_id, is_admin, is_org_owner, created_at
-                   FROM users WHERE organization_id = ? ORDER BY name""",
-                (organization_id,)
-            )
-            rows = cursor.fetchall()
-        
-        return [
-            User(
-                id=row['id'],
-                email=row['email'],
-                password_hash=row['password_hash'],
-                name=row['name'],
-                organization_id=row['organization_id'],
-                is_admin=row['is_admin'],
-                is_org_owner=row['is_org_owner'],
-                created_at=row['created_at']
-            )
-            for row in rows
-        ]
+        with get_session() as session:
+            return session.query(User).filter(User.organization_id == organization_id).order_by(User.name).all()
     
     def update_password(self, new_password):
         """Update user password"""
         password_hash = generate_password_hash(new_password)
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
-                (password_hash, self.id)
-            )
+        with get_session() as session:
+            session.query(User).filter(User.id == self.id).update({"password_hash": password_hash})
         self.password_hash = password_hash
     
     def update_admin_status(self, is_admin):
         """Update admin status"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET is_admin = ? WHERE id = ?",
-                (1 if is_admin else 0, self.id)
-            )
+        with get_session() as session:
+            session.query(User).filter(User.id == self.id).update({"is_admin": bool(is_admin)})
         self.is_admin = bool(is_admin)
     
     def update_org_owner_status(self, is_org_owner):
         """Update organization owner status"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET is_org_owner = ? WHERE id = ?",
-                (1 if is_org_owner else 0, self.id)
-            )
+        with get_session() as session:
+            session.query(User).filter(User.id == self.id).update({"is_org_owner": bool(is_org_owner)})
         self.is_org_owner = bool(is_org_owner)
     
     def update_fields(self, email, name, organization_id):
         """Update user fields (email, name, organization)"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET email = ?, name = ?, organization_id = ? WHERE id = ?",
-                (email, name, organization_id, self.id)
+        with get_session() as session:
+            session.query(User).filter(User.id == self.id).update(
+                {"email": email, "name": name, "organization_id": organization_id}
             )
         self.email = email
         self.name = name
@@ -194,6 +108,5 @@ class User(UserMixin):
     
     def delete(self):
         """Delete user from database"""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id = ?", (self.id,))
+        with get_session() as session:
+            session.query(User).filter(User.id == self.id).delete()

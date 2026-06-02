@@ -62,7 +62,7 @@ def upload_recording():
     except Exception as e:
         return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
 
-    # Check existence du recording via ExtractionService (with bytes)
+    # Check existence du recording through ExtractionService (with bytes)
     exists, zip_top = extraction_service.check_recording_exists(file_content)
     print(f"🔍 ZIP validation - exists: {exists}, zip_top: {zip_top}")
     if exists is None:

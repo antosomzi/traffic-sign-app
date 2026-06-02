@@ -1,28 +1,37 @@
 from datetime import datetime
 from typing import Optional
-from models.database import get_db
+
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, Index
+
+from models.database import Base, get_session
 from models.recording import parse_db_datetime
 
-class ModelHistory:
-    def __init__(self, id: int, version_name: str, updated_date: datetime, is_active: bool = False):
-        self.id = id
-        self.version_name = version_name
-        self.updated_date = updated_date
-        self.is_active = is_active
+
+class ModelHistory(Base):
+    __tablename__ = "model_history"
+
+    id = Column(Integer, primary_key=True)
+    version_name = Column(String, nullable=False)
+    updated_date = Column(DateTime, server_default=func.current_timestamp())
+    is_active = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("idx_model_history_is_active", "is_active"),
+    )
 
     @staticmethod
     def create(version_name: str, is_active: bool = False) -> 'ModelHistory':
         """Crée une nouvelle entrée de modèle."""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO model_history (version_name, is_active)
-                VALUES (?, ?)
-                """,
-                (version_name, int(is_active))
+        with get_session() as session:
+            model_history = ModelHistory(
+                version_name=version_name,
+                updated_date=datetime.now(),
+                is_active=bool(is_active)
             )
-            model_id = cursor.lastrowid
+            session.add(model_history)
+            session.flush()
+            session.refresh(model_history)
+            model_id = model_history.id
 
         if is_active and model_id:
             ModelHistory.set_active_model(model_id)
@@ -32,73 +41,42 @@ class ModelHistory:
     @staticmethod
     def get_model_history(model_id: int) -> Optional['ModelHistory']:
         """Récupère un modèle spécifique par son ID."""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, version_name, updated_date, is_active FROM model_history WHERE id = ?",
-                (model_id,)
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return ModelHistory(
-                id=row['id'],
-                version_name=row['version_name'],
-                updated_date=parse_db_datetime(row['updated_date']),
-                is_active=bool(row['is_active']) # Correction de l'erreur de syntaxe
-            )
-        return None
+        with get_session() as session:
+            result = session.get(ModelHistory, model_id)
+
+            if result and isinstance(result.updated_date, str):
+                result.updated_date = parse_db_datetime(result.updated_date)
+
+            return result
 
     @staticmethod
     def get_current_active() -> Optional['ModelHistory']:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, version_name, updated_date, is_active FROM model_history WHERE is_active = TRUE"
-            )
-            row = cursor.fetchone()
-        
-        if row:
-            return ModelHistory(
-                id=row['id'],
-                version_name=row['version_name'],
-                updated_date=parse_db_datetime(row['updated_date']),
-                is_active=bool(row['is_active'])
-            )
-        return None
+        with get_session() as session:
+            result = session.query(ModelHistory).filter(ModelHistory.is_active.is_(True)).first()
+            if result and isinstance(result.updated_date, str):
+                result.updated_date = parse_db_datetime(result.updated_date)
+            return result
 
     @staticmethod
     def set_active_model(model_id: int) -> bool:
-        with get_db() as conn:
-            cursor = conn.cursor()
+        with get_session() as session:
             try:
-                cursor.execute("UPDATE model_history SET is_active = FALSE")
-                
-                cursor.execute("UPDATE model_history SET is_active = TRUE WHERE id = ?", (model_id,))
-                
-                conn.commit()
+                session.query(ModelHistory).update({"is_active": False})
+                session.query(ModelHistory).filter(ModelHistory.id == model_id).update({"is_active": True})
                 return True
             except Exception as e:
-                conn.rollback()
+                session.rollback()
                 print(f"Erreur lors de la mise à jour du modèle actif : {e}")
                 return False
             
     @staticmethod
     def get_all_model_history() -> list['ModelHistory']:
         """Récupère tous les modèles de l'historique."""
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, version_name, updated_date, is_active FROM model_history ORDER BY updated_date DESC"
-            )
-            rows = cursor.fetchall()
+        with get_session() as session:
+            rows = session.query(ModelHistory).order_by(ModelHistory.updated_date.desc()).all()
 
-        return [
-            ModelHistory(
-                id=row['id'],
-                version_name=row['version_name'],
-                updated_date=parse_db_datetime(row['updated_date']),
-                is_active=bool(row['is_active'])
-            )
-            for row in rows
-        ]
+            for row in rows:
+                if isinstance(row.updated_date, str):
+                    row.updated_date = parse_db_datetime(row.updated_date)
+
+            return rows
