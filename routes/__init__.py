@@ -13,6 +13,7 @@ from routes.sign_app import (
     api_bp,
     test_bp
 )
+from routes.curve_analytic.curve_routes import curves_bp
 
 __all__ = [
     "auth_bp",
@@ -25,5 +26,6 @@ __all__ = [
     "org_owner_bp",
     "map_bp",
     "api_bp",
-    "test_bp"
+    "test_bp",
+    "curves_bp"
 ]

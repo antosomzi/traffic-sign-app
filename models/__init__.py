@@ -2,6 +2,7 @@
 from models.sign_app import (
     Base, engine, get_session, User, Organization, Recording, Sign, APIKey, AuthToken, ModelHistory
 )
+from models.curve_analytic import Curve
 
 __all__ = [
     "Base",
@@ -13,5 +14,6 @@ __all__ = [
     "Sign",
     "APIKey",
     "AuthToken",
-    "ModelHistory"
+    "ModelHistory",
+    "Curve"
 ]

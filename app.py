@@ -15,7 +15,7 @@ from flask_login import LoginManager
 from config import Config
 from routes import (
     auth_bp, upload_bp, status_bp, download_bp, delete_bp, rerun_bp,
-    admin_bp, org_owner_bp, map_bp, api_bp, test_bp
+    admin_bp, org_owner_bp, map_bp, api_bp, test_bp, curves_bp
 )
 from models.sign_app.user import User
 
@@ -59,6 +59,7 @@ def create_app(config_class=Config):
     app.register_blueprint(org_owner_bp)
     app.register_blueprint(map_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(curves_bp)
     
     # Register test routes (only active in local mode)
     if os.getenv("USE_GPU_INSTANCE", "false").lower() != "true":

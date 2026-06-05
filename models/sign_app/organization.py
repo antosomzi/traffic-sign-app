@@ -2,6 +2,7 @@
 
 import os
 from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy.orm import relationship
 
 from .database import Base, get_session
 
@@ -20,6 +21,9 @@ class Organization(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, server_default=func.current_timestamp())
+
+    # Relationships
+    curves_recordings = relationship("CurveRecording", back_populates="organization", cascade="all, delete-orphan")
     
     @staticmethod
     def create(name):

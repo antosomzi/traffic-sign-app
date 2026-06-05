@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+
+{% block title %}Curves Analytics Map{% endblock %}
+
+{% block extra_styles %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<!-- MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
+
+<style>
+    .section-map {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        padding: 20px;
+        position: relative;
+        height: calc(100vh - 80px);
+    }
+
+    /* Cluster Styles to match routes_map.html */
+    .route-cluster-small {
+        background-color: rgba(181, 226, 140, 0.6);
+    }
+    .route-cluster-small div {
+        background-color: rgba(110, 204, 57, 0.6);
+    }
+
+    .route-cluster-medium {
+        background-color: rgba(241, 211, 87, 0.6);
+    }
+    .route-cluster-medium div {
+        background-color: rgba(240, 194, 12, 0.6);
+    }
+
+    .route-cluster-large {
+        background-color: rgba(253, 156, 115, 0.6);
+    }
+    .route-cluster-large div {
+        background-color: rgba(241, 128, 23, 0.6);
+    }
+
+    #map {
+        flex: 1;
+        width: 100%;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        background: #f8fafc;
+    }
+
+    /* Sidebar Styling */
+    #sidebar {
+        position: absolute;
+        top: 40px;
+        right: 40px;
+        bottom: 40px;
+        width: 450px;
+        background: white;
+        z-index: 1000;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.3s ease, width 0.3s ease;
+        transform: translateX(500px); /* Hidden by default */
+    }
+
+    #sidebar.active {
+        transform: translateX(0);
+    }
+
+    #sidebar.minimized {
+        width: 60px;
+        overflow: hidden;
+    }
+
+    #sidebar.minimized #sidebar-title,
+    #sidebar.minimized #sidebar-close,
+    #sidebar.minimized .sidebar-content {
+        display: none;
+    }
+
+    #sidebar.minimized .sidebar-header {
+        justify-content: center;
+        padding: 16px 0;
+    }
+
+    .sidebar-header {
+        padding: 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f8fafc;
+        border-radius: 12px 12px 0 0;
+    }
+
+    .sidebar-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+    }
+
+    .sidebar-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 18px;
+        color: #64748b;
+        padding: 4px;
+        border-radius: 4px;
+    }
+
+    .sidebar-btn:hover {
+        background: #e2e8f0;
+    }
+
+    /* Info Grouping */
+    .info-group {
+        margin-bottom: 24px;
+    }
+
+    .info-group h4 {
+        font-size: 14px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 4px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .info-card {
+        background: #f8fafc;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid #f1f5f9;
+    }
+
+    .info-label {
+        font-size: 11px;
+        color: #64748b;
+        margin-bottom: 2px;
+    }
+
+    .info-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .recording-select-container {
+        margin-bottom: 20px;
+    }
+
+    #recording-selector {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        background: white;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    /* Charts Container */
+    .chart-container {
+        margin-top: 15px;
+        height: 180px;
+        position: relative;
+    }
+
+    /* Upload FAB */
+    #upload-fab {
+        position: absolute;
+        bottom: 30px;
+        left: 30px;
+        z-index: 1000;
+        background: #1f2937;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 50px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Modal Styling */
+    dialog {
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        width: 90%;
+        max-width: 500px;
+    }
+
+    dialog::backdrop {
+        background: rgba(0,0,0,0.5);
+    }
+
+    .modal-inner {
+        padding: 24px;
+    }
+
+    .file-input-wrapper {
+        border: 2px dashed #e2e8f0;
+        padding: 40px;
+        border-radius: 12px;
+        text-align: center;
+        margin: 20px 0;
+        cursor: pointer;
+    }
+
+    .file-input-wrapper:hover {
+        border-color: #3b82f6;
+        background: #f8fafc;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+    }
+
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-secondary { background: #e2e8f0; color: #475569; }
+
+    .external-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: #3b82f6;
+        text-decoration: none;
+        font-size: 13px;
+        margin-top: 8px;
+    }
+    
+    .external-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="section-map">
+    <div id="map"></div>
+
+    <!-- Floating Action Button for Upload -->
+    <button id="upload-fab">
+        <span>📦</span> Upload Recording ZIP
+    </button>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <h3 id="sidebar-title">Curve Analytics</h3>
+            <div class="sidebar-controls">
+                <button class="sidebar-btn" id="sidebar-minimize" title="Minimize">↔️</button>
+                <button class="sidebar-btn" id="sidebar-close" title="Close">✖️</button>
+            </div>
+        </div>
+        <div class="sidebar-content">
+            <!-- Physical Data Section -->
+            <div class="info-group">
+                <h4>Physical Data</h4>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Curve ID</div>
+                        <div class="info-value" id="val-curve-id">-</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Radius (ft)</div>
+                        <div class="info-value" id="val-radius">-</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Deviation Angle</div>
+                        <div class="info-value" id="val-angle">-</div>
+                    </div>
+                    <div class="info-card" style="display: flex; align-items: center; justify-content: center;">
+                         <a id="val-gmaps" href="#" target="_blank" class="external-link">📍 View on Google Maps</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recording Selector -->
+            <div class="recording-select-container">
+                <label class="info-label">Select Recording</label>
+                <select id="recording-selector"></select>
+            </div>
+
+            <!-- Analysis Results Section -->
+            <div class="info-group">
+                <h4>Analysis Results</h4>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Advisory Speed</div>
+                        <div class="info-value" id="val-advisory-speed">-</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Max Superelevation</div>
+                        <div class="info-value" id="val-max-super">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="info-group">
+                <h4>TimeSeries Analytics</h4>
+                <div class="chart-container">
+                    <canvas id="speedChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="superelevationChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="bbiChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<!-- Upload Modal -->
+<dialog id="upload-modal">
+    <div class="modal-inner">
+        <div class="modal-header">
+            <h3>Upload Recording ZIP</h3>
+            <p style="color: #64748b; font-size: 14px;">Select the {recording_id}.zip file containing curve data.</p>
+        </div>
+        <div class="modal-body">
+            <div class="file-input-wrapper" onclick="document.getElementById('zip-file').click()">
+                <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
+                <div id="file-name-display">Click to select ZIP file</div>
+                <input type="file" id="zip-file" accept=".zip" style="display: none">
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="modal-submit">Start Upload</button>
+        </div>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Leaflet & MarkerCluster JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // 1. Data Injection
+    const curvesData = {{ curves_json | safe }};
+    
+    // 2. Map Initialization
+    const map = L.map('map', {
+        center: [0, 0],
+        zoom: 2,
+        zoomControl: false
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    setTimeout(() => map.invalidateSize(), 100);
+
+    // Marker Clusters
+    const markers = L.markerClusterGroup({
+        spiderfyOnMaxZoom: false,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        maxClusterRadius: 80,
+        iconCreateFunction: function(cluster) {
+            const childCount = cluster.getChildCount();
+            let c = ' route-cluster-';
+            if (childCount < 10) c += 'small';
+            else if (childCount < 100) c += 'medium';
+            else c += 'large';
+            return new L.DivIcon({
+                html: '<div><span>' + childCount + '</span></div>',
+                className: 'marker-cluster' + c,
+                iconSize: new L.Point(40, 40)
+            });
+        }
+    });
+    const polylines = L.layerGroup();
+    
+    // Icons
+    const blueIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: "<div style='background-color:#3b82f6; width:14px; height:14px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);'></div>",
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
+    });
+
+    // 3. Process Curves
+    const curveLayers = [];
+    const bounds = L.latLngBounds();
+
+    curvesData.forEach(curve => {
+        const center = [curve.midpointLat, curve.midpointLon];
+        bounds.extend(center);
+
+        const marker = L.marker(center, { icon: blueIcon });
+        marker.on('click', () => openSidebar(curve));
+        markers.addLayer(marker);
+
+        if (curve.centerlineGeojson && curve.centerlineGeojson.coordinates) {
+            // GeoJSON coordinates are [lon, lat] -> Leaflet expects [lat, lon]
+            const latLngs = curve.centerlineGeojson.coordinates.map(p => [p[1], p[0]]);
+            const polyline = L.polyline(latLngs, {
+                color: '#3b82f6',
+                weight: 4,
+                opacity: 0.8
+            });
+            polyline.on('click', () => openSidebar(curve));
+            curveLayers.push({ curve, polyline });
+        }
+    });
+
+    map.addLayer(markers);
+    if (curvesData.length > 0) map.fitBounds(bounds, { padding: [100, 100] });
+
+    map.on('zoomend', () => {
+        if (map.getZoom() >= 15) {
+            curveLayers.forEach(item => polylines.addLayer(item.polyline));
+            map.addLayer(polylines);
+        } else {
+            polylines.clearLayers();
+            map.removeLayer(polylines);
+        }
+    });
+
+    // 4. Sidebar & Multi-Recording Logic
+    const sidebar = document.getElementById('sidebar');
+    const recordingSelector = document.getElementById('recording-selector');
+    let charts = {};
+    let currentCurve = null;
+
+    function openSidebar(curve) {
+        currentCurve = curve;
+        sidebar.classList.add('active');
+        
+        // Update Physical Data
+        document.getElementById('val-curve-id').textContent = curve.curveId;
+        document.getElementById('val-radius').textContent = curve.curveRadiusFt ? Math.round(curve.curveRadiusFt) : 'N/A';
+        document.getElementById('val-angle').textContent = curve.deviationAngleDeg ? curve.deviationAngleDeg.toFixed(1) + '°' : 'N/A';
+        document.getElementById('val-gmaps').href = curve.googleMapsUrl;
+
+        // Populate Recording Selector
+        recordingSelector.innerHTML = '';
+        curve.recordings.forEach((rec, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            opt.textContent = rec.recordingId;
+            recordingSelector.appendChild(opt);
+        });
+
+        // Load first recording by default
+        if (curve.recordings.length > 0) {
+            updateRecordingView(curve.recordings[0]);
+        }
+    }
+
+    recordingSelector.onchange = (e) => {
+        const rec = currentCurve.recordings[e.target.value];
+        updateRecordingView(rec);
+    };
+
+    function updateRecordingView(rec) {
+        document.getElementById('val-advisory-speed').textContent = rec.advisorySpeedDisplay ? rec.advisorySpeedDisplay + ' mph' : 'N/A';
+        document.getElementById('val-max-super').textContent = rec.maxSuperelevation ? rec.maxSuperelevation.toFixed(2) + '%' : 'N/A';
+        
+        renderCharts(rec);
+    }
+
+    function renderCharts(rec) {
+        // Prepare datasets
+        const speedData = rec.speedSeries.map(p => ({ x: p.distance_ft, y: p.value }));
+        const advisoryData = rec.advisorySpeedSeries.map(p => ({ x: p.distance_ft, y: p.value }));
+        const superData = rec.superelevationSeries.map(p => ({ x: p.distance_ft, y: p.value }));
+        const bbiData = rec.bbiSeries.map(p => ({ x: p.distance_ft, y: p.bbi_filtered }));
+
+        const configs = [
+            { id: 'speedChart', label: 'Speed (mph)', data: speedData, color: '#3b82f6', advisory: advisoryData },
+            { id: 'superelevationChart', label: 'Superelevation (%)', data: superData, color: '#f59e0b' },
+            { id: 'bbiChart', label: 'BBI Filtered', data: bbiData, color: '#10b981' }
+        ];
+
+        configs.forEach(conf => {
+            if (charts[conf.id]) charts[conf.id].destroy();
+            const ctx = document.getElementById(conf.id).getContext('2d');
+            
+            const datasets = [{
+                label: conf.label,
+                data: conf.data,
+                borderColor: conf.color,
+                backgroundColor: conf.color + '22',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0
+            }];
+
+            if (conf.advisory) {
+                datasets.push({
+                    label: 'Advisory',
+                    data: conf.advisory,
+                    borderColor: '#ef4444',
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                });
+            }
+
+            charts[conf.id] = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Distance (ft)', font: { size: 10 } } },
+                        y: { beginAtZero: false }
+                    },
+                    plugins: { 
+                        legend: { 
+                            display: conf.advisory ? true : false, 
+                            labels: { boxWidth: 12, font: { size: 10 } },
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                // Show only the clicked dataset, hide others
+                                ci.data.datasets.forEach((ds, i) => {
+                                    ci.setDatasetVisibility(i, i === index);
+                                });
+                                ci.update();
+                            }
+                        } 
+                    }
+                }
+            });
+        });
+    }
+
+    document.getElementById('sidebar-close').onclick = () => sidebar.classList.remove('active');
+    document.getElementById('sidebar-minimize').onclick = () => sidebar.classList.toggle('minimized');
+
+    // 5. ZIP Upload Logic
+    const modal = document.getElementById('upload-modal');
+    const fab = document.getElementById('upload-fab');
+    const fileInput = document.getElementById('zip-file');
+    const fileNameDisplay = document.getElementById('file-name-display');
+    const submit = document.getElementById('modal-submit');
+
+    fab.onclick = () => modal.showModal();
+    document.getElementById('modal-cancel').onclick = () => modal.close();
+
+    fileInput.onchange = (e) => {
+        if (e.target.files.length > 0) {
+            fileNameDisplay.textContent = e.target.files[0].name;
+            fileNameDisplay.style.color = '#1e293b';
+            fileNameDisplay.style.fontWeight = '600';
+        }
+    };
+
+    submit.onclick = async () => {
+        if (fileInput.files.length === 0) {
+            alert('Please select a ZIP file');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        submit.disabled = true;
+        submit.textContent = 'Uploading...';
+
+        try {
+            const response = await fetch("{{ url_for('curves.upload_curves') }}", {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                alert('Recording uploaded successfully!');
+                location.reload();
+            } else {
+                const err = await response.json();
+                alert('Upload failed: ' + (err.message || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Network error during upload');
+        } finally {
+            submit.disabled = false;
+            submit.textContent = 'Start Upload';
+        }
+    };
+</script>
+{% endblock %}

@@ -59,7 +59,9 @@ def get_db():
 
 def init_db():
     """Initialize database tables"""
-    from . import organization, user, recording, sign, auth_token, api_key, model_history  # noqa: F401
+    from models.sign_app import organization, user, recording, sign, auth_token, api_key, model_history  # noqa: F401
+    from models.curve_analytic.curve import Curve, RecordingCurve  # noqa: F401
+    from models.curve_analytic.recording import CurveRecording  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
 
