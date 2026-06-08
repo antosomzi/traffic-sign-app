@@ -76,7 +76,7 @@ def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, 
             step_status = [{"name": step, "done": False} for step in STEP_NAMES]
 
         # 3. Final status adjustment if DB is not yet updated
-        # We only override if the DB doesn't already indicate an error or completion
+        # If DB already says 'completed' or 'error', we trust it and skip disk adjustment
         if display_status in ["validated", "processing"]:
             all_done = all(s["done"] for s in step_status)
             any_done = any(s["done"] for s in step_status)
@@ -88,8 +88,15 @@ def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, 
                 display_status = "processing"
                 display_message = display_message or "Processing in progress..."
             else:
-                display_message = display_message or "Awaiting processing"
+                # If DB says processing but no files are found, keep DB status but clarify message
+                if display_status == "processing":
+                    display_message = display_message or "Pipeline starting..."
+                else:
+                    display_message = display_message or "Awaiting processing"
 
+        elif display_status == "completed":
+            display_message = ""
+        
         elif display_status == "error":
             display_message = display_message or "Error during processing"
 
