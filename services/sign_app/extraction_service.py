@@ -5,11 +5,13 @@ import json
 import os
 import shutil
 import zipfile
+from config import Config
 from services.sign_app.s3_service import S3VideoService, find_video_in_recording
 from services.sign_app.video_encoding_service import VideoEncodingError, encode_video_cfr_semi_all_intra
 from services.sign_app.redis_service import RedisProgressService
 from services.sign_app.validation_service import ValidationService
-from utils.file_utils import compute_folder_size, create_status_file
+from models.sign_app.recording import Recording
+from utils.file_utils import compute_folder_size, update_recording_status
 from utils.cleanup_utils import clean_macos_files
 
 USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
@@ -51,12 +53,11 @@ class ExtractionService:
                 # There must be exactly one root folder
                 if len(top_levels) != 1:
                     return None, None
-                zip_top = top_levels.pop()
-                from config import Config
-                final_path = os.path.join(Config.EXTRACT_FOLDER, zip_top)
+                recording_id = top_levels.pop()
+                final_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
                 if os.path.exists(final_path):
-                    return True, zip_top
-                return False, zip_top
+                    return True, recording_id
+                return False, recording_id
         except Exception:
             return None, None
 
@@ -75,19 +76,16 @@ class ExtractionService:
         return encode_video_cfr_semi_all_intra(video_path)
 
     def _update_status_with_s3_metadata(self, final_path, video_path, s3_key):
-        """Persist S3 metadata (key + camera folder) in status.json."""
+        """Persist S3 metadata (key + camera folder) in the database."""
         camera_folder = os.path.dirname(video_path)
         camera_folder_relative = os.path.relpath(camera_folder, final_path)
+        recording_id = os.path.basename(final_path)
 
-        status_file = os.path.join(final_path, "status.json")
-        with open(status_file, 'r') as f:
-            status_data = json.load(f)
-
-        status_data['video_s3_key'] = s3_key
-        status_data['camera_folder'] = camera_folder_relative
-
-        with open(status_file, 'w') as f:
-            json.dump(status_data, f, indent=2)
+        Recording.update_status(
+            recording_id, 
+            video_s3_key=s3_key, 
+            camera_folder=camera_folder_relative
+        )
 
     @staticmethod
     def _cleanup_local_video_files(video_path, upload_source_path):
@@ -97,7 +95,7 @@ class ExtractionService:
         if os.path.exists(video_path):
             os.remove(video_path)
 
-    def _upload_recording_video_to_s3(self, final_path, zip_top, job_id):
+    def _upload_recording_video_to_s3(self, final_path, recording_id, job_id):
         """Upload recording video to S3 and clean local copy when successful."""
         video_path = find_video_in_recording(final_path)
         if not video_path:
@@ -115,7 +113,7 @@ class ExtractionService:
 
             print(f"📤 Uploading video to S3: {upload_source_path}")
             s3_service = S3VideoService()
-            s3_key = s3_service.upload_video(upload_source_path, zip_top)
+            s3_key = s3_service.upload_video(upload_source_path, recording_id)
 
             self._update_status_with_s3_metadata(final_path, video_path, s3_key)
             self._cleanup_local_video_files(video_path, upload_source_path)
@@ -156,7 +154,7 @@ class ExtractionService:
             return None
             
         temp_extract_path = os.path.join(temp_root, job_id)
-        zip_top = None
+        recording_id = None
         final_path = None
 
         try:
@@ -196,8 +194,8 @@ class ExtractionService:
                     self.redis_service.set_extraction_progress(job_id, prog)
                     return
 
-                zip_top = top_levels.pop()
-                print(f"✅ Single root folder found: {zip_top}")
+                recording_id = top_levels.pop()
+                print(f"✅ Single root folder found: {recording_id}")
                 os.makedirs(temp_extract_path, exist_ok=True)
 
                 # Extract all files
@@ -218,7 +216,7 @@ class ExtractionService:
                         self.redis_service.set_extraction_progress(job_id, prog)
 
             # Collapse duplicate folders
-            inner_candidate = os.path.join(temp_extract_path, zip_top)
+            inner_candidate = os.path.join(temp_extract_path, recording_id)
             if os.path.isdir(inner_candidate):
                 print(f"🔄 Collapsing duplicate folder structure")
                 temp_flat = temp_extract_path + "__flat"
@@ -230,8 +228,8 @@ class ExtractionService:
             clean_macos_files(temp_extract_path)
 
             # Validate structure
-            print(f"🔍 Validating structure for: {zip_top}")
-            is_valid, validation_errors = self.validation_service.validate_structure(temp_extract_path, zip_top)
+            print(f"🔍 Validating structure for: {recording_id}")
+            is_valid, validation_errors = self.validation_service.validate_structure(temp_extract_path, recording_id)
             
             if not is_valid:
                 print(f"❌ Validation failed: {validation_errors}")
@@ -242,19 +240,19 @@ class ExtractionService:
                 return
 
             # Atomic move to final location
-            final_path = os.path.join(final_root, zip_top)
+            final_path = os.path.join(final_root, recording_id)
             
             if os.path.exists(final_path):
-                print(f"❌ Recording already exists: {zip_top}")
+                print(f"❌ Recording already exists: {recording_id}")
                 prog["status"] = "error"
-                prog["error_msg"] = f"Recording with ID '{zip_top}' already exists."
+                prog["error_msg"] = f"Recording with ID '{recording_id}' already exists."
                 self.redis_service.set_extraction_progress(job_id, prog)
                 return
 
             shutil.move(temp_extract_path, final_path)
 
             # Create initial status file
-            create_status_file(final_path, "validated", "Upload and validation successful, awaiting processing.")
+            update_recording_status(recording_id, "validated", "Upload and validation successful, awaiting processing.")
 
             # In GPU mode, defer S3 upload until after GPU re-encoding is done.
             # In local mode, keep current behavior (upload during extraction).
@@ -262,12 +260,12 @@ class ExtractionService:
                 print("⚡ USE_GPU_INSTANCE=true: deferring S3 upload until post-encoding")
             else:
                 # Upload video to S3 and remove local copy to save EFS space
-                self._upload_recording_video_to_s3(final_path, zip_top, job_id)
+                self._upload_recording_video_to_s3(final_path, recording_id, job_id)
 
             # Calculate size and mark as done
             size_bytes = compute_folder_size(final_path)
             prog["extract_size"] = size_bytes
-            prog["recording_id"] = zip_top
+            prog["recording_id"] = recording_id
             prog["status"] = "done"
             self.redis_service.set_extraction_progress(job_id, prog)
             
@@ -280,8 +278,8 @@ class ExtractionService:
                 # Not critical if deletion fails - log and continue
                 print(f"⚠️ Could not delete ZIP file: {e}")
             
-            print(f"✅ Extraction complete: {zip_top}")
-            return zip_top
+            print(f"✅ Extraction complete: {recording_id}")
+            return recording_id
 
         except zipfile.BadZipFile:
             print(f"❌ Invalid ZIP file")

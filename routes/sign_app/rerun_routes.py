@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from config import Config
 from models.sign_app.model_history import ModelHistory
 from models.sign_app.recording import Recording
-from utils.file_utils import create_status_file
+from utils.file_utils import update_recording_status
 from services.sign_app.organization_service import OrganizationService
 
 try:
@@ -37,15 +37,8 @@ def rerun_recording(recording_id: str):
         }), 404
 
     # Read current status to tailor response messaging (rerun is allowed even while processing)
-    status_file = os.path.join(recording_path, "status.json")
-    was_processing = False
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, "r") as handle:
-                status_data = json.load(handle)
-                was_processing = status_data.get("status") == "processing"
-        except Exception:
-            pass
+    recording = Recording.get_by_id(recording_id)
+    was_processing = recording.status == "processing" if recording else False
 
     if not CELERY_AVAILABLE:
         return jsonify({
@@ -74,9 +67,9 @@ def rerun_recording(recording_id: str):
                     "message": f"Failed to delete old results: {str(e)}"
                 }), 500
 
-    # Update status.json to show the recording is queued again
-    create_status_file(
-        recording_path,
+    # Update database to show the recording is queued again
+    update_recording_status(
+        recording_id,
         "processing",
         "Pipeline restart requested. Re-running from step 0..."
     )

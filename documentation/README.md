@@ -180,7 +180,6 @@ app/
 │   └── <uuid>_<recording_id>.zip
 ├── recordings/           # Extracted and validated recordings
 │   └── <recording_id>/
-│       ├── status.json   # Processing status tracking
 │       ├── result_pipeline_stable/  # ML pipeline outputs
 │       └── <device_id>/  # Original recording data
 ├── org_routes/           # Organization road network GeoJSON files

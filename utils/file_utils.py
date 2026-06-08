@@ -3,6 +3,7 @@
 import os
 import json
 from config import Config
+from models.sign_app.recording import Recording
 
 
 def allowed_file(filename):
@@ -24,32 +25,11 @@ def compute_folder_size(path):
     return total
 
 
-def create_status_file(recording_path, status, message=""):
-    """Creates or updates the status.json file for a recording"""
-    import datetime
-    
-    status_file = os.path.join(recording_path, "status.json")
-    
-    # Load existing data to preserve video_s3_key
-    existing_data = {}
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, "r") as f:
-                existing_data = json.load(f)
-        except Exception:
-            pass
-    
-    status_data = {
-        "status": status,
-        "message": message,
-        "timestamp": datetime.datetime.now().isoformat()
-    }
-    
-    # Preserve video_s3_key and camera_folder if they exist
-    if existing_data.get("video_s3_key"):
-        status_data["video_s3_key"] = existing_data["video_s3_key"]
-    if existing_data.get("camera_folder"):
-        status_data["camera_folder"] = existing_data["camera_folder"]
-    
-    with open(status_file, "w") as f:
-        json.dump(status_data, f, indent=2)
+def update_recording_status(recording_id, status, message="", error_details=None):
+    """Updates the recording status in the database"""
+    Recording.update_status(
+        recording_id, 
+        status=status, 
+        message=message, 
+        error_details=error_details
+    )

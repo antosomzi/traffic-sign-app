@@ -29,45 +29,32 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import Config
+from models.sign_app.recording import Recording
 from services.sign_app.s3_service import S3VideoService, find_video_in_recording
 
 
-def get_s3_key_from_status(recording_path: str) -> str | None:
-    """Check if recording already has an S3 key in status.json."""
-    status_file = os.path.join(recording_path, "status.json")
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, 'r') as f:
-                status_data = json.load(f)
-            return status_data.get('video_s3_key')
-        except Exception:
-            pass
-    return None
+def get_s3_key_from_status(recording_id: str) -> str | None:
+    """Check if recording already has an S3 key in the database."""
+    recording = Recording.get_by_id(recording_id)
+    return recording.video_s3_key if recording else None
 
 
-def update_status_with_s3_key(recording_path: str, s3_key: str, video_path: str = None) -> bool:
-    """Update status.json with S3 key and camera folder path."""
-    status_file = os.path.join(recording_path, "status.json")
+def update_status_with_s3_key(recording_id: str, s3_key: str, video_path: str = None, recording_path: str = None) -> bool:
+    """Update recording metadata in the database."""
     try:
-        if os.path.exists(status_file):
-            with open(status_file, 'r') as f:
-                status_data = json.load(f)
-        else:
-            status_data = {}
-        
-        status_data['video_s3_key'] = s3_key
-        
-        # Add camera_folder if video_path is provided
-        if video_path:
+        camera_folder_relative = None
+        if video_path and recording_path:
             camera_folder = os.path.dirname(video_path)
             camera_folder_relative = os.path.relpath(camera_folder, recording_path)
-            status_data['camera_folder'] = camera_folder_relative
         
-        with open(status_file, 'w') as f:
-            json.dump(status_data, f, indent=2)
+        Recording.update_status(
+            recording_id,
+            video_s3_key=s3_key,
+            camera_folder=camera_folder_relative
+        )
         return True
     except Exception as e:
-        print(f"  ❌ Failed to update status.json: {e}")
+        print(f"  ❌ Failed to update database: {e}")
         return False
 
 
@@ -90,26 +77,14 @@ def migrate_recording(
     video_path = find_video_in_recording(recording_path)
     
     # Check if already migrated
-    existing_s3_key = get_s3_key_from_status(recording_path)
+    existing_s3_key = get_s3_key_from_status(recording_id)
     if existing_s3_key:
-        # Already on S3 - check if camera_folder is missing in status.json
-        status_file = os.path.join(recording_path, "status.json")
-        needs_camera_folder = False
-        status_data = None
+        # Already on S3 - check if camera_folder is missing in the database
+        recording = Recording.get_by_id(recording_id)
+        needs_camera_folder = recording and not recording.camera_folder
         
-        if os.path.exists(status_file):
-            try:
-                with open(status_file, 'r') as f:
-                    status_data = json.load(f)
-                if 'camera_folder' not in status_data:
-                    needs_camera_folder = True
-                    print(f"  🔍 Missing camera_folder in {recording_id}, will add it")
-            except Exception as e:
-                print(f"  ⚠️  Error reading status.json: {e}")
-                pass
-        
-        # Update status.json with missing camera_folder
-        if needs_camera_folder and status_data is not None:
+        if needs_camera_folder:
+            print(f"  🔍 Missing camera_folder for {recording_id}, will add it")
             # Try to find camera folder structure even if video is gone
             camera_folder_path = None
             
@@ -129,12 +104,8 @@ def migrate_recording(
             if camera_folder_path:
                 camera_folder_relative = os.path.relpath(camera_folder_path, recording_path)
                 
-                # Update status.json directly
-                try:
-                    status_data['camera_folder'] = camera_folder_relative
-                    with open(status_file, 'w') as f:
-                        json.dump(status_data, f, indent=2)
-                    
+                # Update DB directly
+                if update_status_with_s3_key(recording_id, existing_s3_key, video_path, recording_path):
                     result["status"] = "updated"
                     result["message"] = f"Added camera_folder: {camera_folder_relative}"
                     
@@ -146,9 +117,9 @@ def migrate_recording(
                         result["message"] += f" (deleted local {result['size_mb']:.1f} MB)"
                     
                     return result
-                except Exception as e:
+                else:
                     result["status"] = "error"
-                    result["message"] = f"Failed to update status.json: {e}"
+                    result["message"] = f"Failed to update database"
                     return result
             else:
                 result["status"] = "error"
@@ -185,8 +156,8 @@ def migrate_recording(
         # Upload to S3
         s3_key = s3_service.upload_video(video_path, recording_id)
         
-        # Update status.json with S3 key and camera folder
-        if update_status_with_s3_key(recording_path, s3_key, video_path):
+        # Update DB with S3 key and camera folder
+        if update_status_with_s3_key(recording_id, s3_key, video_path, recording_path):
             result["status"] = "migrated"
             result["message"] = f"Uploaded to S3: {s3_key}"
             
@@ -196,7 +167,7 @@ def migrate_recording(
                 result["message"] += " (local deleted)"
         else:
             result["status"] = "error"
-            result["message"] = "Upload succeeded but failed to update status.json"
+            result["message"] = "Upload succeeded but failed to update database"
             
     except Exception as e:
         result["status"] = "error"

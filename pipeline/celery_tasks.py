@@ -18,6 +18,8 @@ from services.sign_app.confidence import add_confidence_to_merged_signs_csv
 from services.sign_app.filtered_output_json import filter_output_json
 from services.sign_app.route_filtering_service import filter_signs_by_org_routes
 from services.sign_app.s3_service import S3VideoService, get_camera_folder
+from models.sign_app.recording import Recording
+from utils.file_utils import update_recording_status
 
 
 # Configuration - Auto-detect environment (EC2 vs local)
@@ -32,71 +34,30 @@ RECORDINGS_PATH = os.path.join(BASE_PATH, "recordings")
 USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
 
 
-def update_status(recording_path, status, message="", error_details=None):
-    """Updates the status.json file for a recording.
-    
-    Args:
-        recording_path: Path to the recording directory
-        status: Status string (processing, completed, error)
-        message: User-friendly status message
-        error_details: Optional dict with technical error details (diagnostics, logs, etc.)
-    """
-    status_file = os.path.join(recording_path, "status.json")
-
-    # Load existing status to preserve video_s3_key
-    existing_data = {}
-    if os.path.exists(status_file):
-        try:
-            with open(status_file, "r") as f:
-                existing_data = json.load(f)
-        except Exception:
-            pass
-    
-    status_data = {
-        "status": status,
-        "message": message,
-        "timestamp": __import__("datetime").datetime.now().isoformat(),
-    }
-    
-    # Preserve video_s3_key and camera_folder if they exist
-    if existing_data.get("video_s3_key"):
-        status_data["video_s3_key"] = existing_data["video_s3_key"]
-    if existing_data.get("camera_folder"):
-        status_data["camera_folder"] = existing_data["camera_folder"]
-    
-    # Add error_details if provided (for technical debugging)
-    if error_details:
-        status_data["error_details"] = error_details
-
-    with open(status_file, "w") as f:
-        json.dump(status_data, f, indent=2)
-
-
-def download_video_from_s3(recording_path):
+def download_video_from_s3(recording_id):
     """Download video from S3 if it was uploaded there.
     
     Args:
-        recording_path: Path to the recording directory
+        recording_id: The unique recording identifier
         
     Returns:
         Path to local video file or None if no S3 video
     """
-    status_file = os.path.join(recording_path, "status.json")
+    recording = Recording.get_by_id(recording_id)
     
-    if not os.path.exists(status_file):
+    if not recording:
         return None
     
+    recording_path = os.path.join(RECORDINGS_PATH, recording_id)
+    
     try:
-        with open(status_file, 'r') as f:
-            status_data = json.load(f)
-        
-        s3_key = status_data.get('video_s3_key')
+        s3_key = recording.video_s3_key
         
         if not s3_key:
             return None
         
-        # Get camera folder path from status.json
-        camera_folder_relative = status_data.get('camera_folder')
+        # Get camera folder path from DB
+        camera_folder_relative = recording.camera_folder
         
         if not camera_folder_relative:
             # Fallback: try to find camera folder
@@ -157,14 +118,14 @@ def run_pipeline_local(recording_id, recording_path):
             return f"Recording {recording_id} was deleted before pipeline started"
         
         # Download video from S3 if needed
-        # local_video_path = download_video_from_s3(recording_path)
+        # local_video_path = download_video_from_s3(recording_id)
         
         # Check again after download
         if not os.path.exists(recording_path):
             cleanup_local_video(local_video_path)
             return f"Recording {recording_id} was deleted during video download"
         
-        update_status(recording_path, "processing", "ML pipeline in progress (local)...")
+        update_recording_status(recording_id, "processing", "ML pipeline in progress (local)...")
 
         # Script is in the BASE_PATH directory
         pipeline_script = os.path.join(BASE_PATH, "simulate_pipeline.sh")
@@ -198,7 +159,7 @@ def run_pipeline_local(recording_id, recording_path):
                 "recognizable traffic signs or the recording quality may be insufficient."
             )
             if os.path.exists(recording_path):
-                update_status(recording_path, "error", user_friendly_message)
+                update_recording_status(recording_id, "error", user_friendly_message)
 
             # Raise with technical details for logging
             raise TimeoutError(f"Pipeline timeout - expected output file not found: {export_csv}")
@@ -216,7 +177,7 @@ def run_pipeline_local(recording_id, recording_path):
         cleanup_local_video(local_video_path)
 
         if os.path.exists(recording_path):
-            update_status(recording_path, "completed", "Processing completed successfully.")
+            update_recording_status(recording_id, "completed", "Processing completed successfully.")
 
         return f"Pipeline completed for {recording_id}"
     
@@ -236,14 +197,14 @@ def run_pipeline_gpu(recording_id, recording_path):
             return f"Recording {recording_id} was deleted before pipeline started"
         
         # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
-        local_video_path = download_video_from_s3(recording_path)
+        local_video_path = download_video_from_s3(recording_id)
         
         # Check again after download (user might have deleted during download)
         if not os.path.exists(recording_path):
             cleanup_local_video(local_video_path)
             return f"Recording {recording_id} was deleted during video download"
         
-        update_status(recording_path, "processing", "GPU instance is not ready yet, please wait...")
+        update_recording_status(recording_id, "processing", "GPU instance is not ready yet, please wait...")
 
         # start_and_run_pipeline_ssh now returns 4 values: success, instance_id, message, error_details
         result = start_and_run_pipeline_ssh(recording_id)
@@ -259,8 +220,8 @@ def run_pipeline_gpu(recording_id, recording_path):
             cleanup_local_video(local_video_path)
             
             # Store both user-friendly message and technical error details
-            update_status(
-                recording_path, 
+            update_recording_status(
+                recording_id, 
                 "error", 
                 f"GPU pipeline failed: {message}",
                 error_details=error_details
@@ -290,7 +251,7 @@ def run_pipeline_gpu(recording_id, recording_path):
                 "No traffic signs detected in this recording. The video may not contain any "
                 "recognizable traffic signs or the recording quality may be insufficient."
             )
-            update_status(recording_path, "error", user_friendly_message)
+            update_recording_status(recording_id, "error", user_friendly_message)
 
             # Raise with technical details for logging, but user sees friendly message
             raise FileNotFoundError(f"Expected output file not found: {export_csv}")
@@ -311,8 +272,8 @@ def run_pipeline_gpu(recording_id, recording_path):
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)
         
-        update_status(
-            recording_path, "completed", f"Pipeline completed on GPU instance {instance_id}"
+        update_recording_status(
+            recording_id, "completed", f"Pipeline completed on GPU instance {instance_id}"
         )
 
         return f"Pipeline completed for {recording_id} on GPU instance {instance_id}"
@@ -346,16 +307,16 @@ def run_pipeline_task(recording_id):
             return run_pipeline_local(recording_id, recording_path)
 
     except subprocess.CalledProcessError as e:
-        update_status(recording_path, "error", f"Pipeline execution error: {str(e)}")
+        update_recording_status(recording_id, "error", f"Pipeline execution error: {str(e)}")
         raise
 
     except (FileNotFoundError, TimeoutError) as e:
-        # These exceptions already have user-friendly messages written to status.json
+        # These exceptions already have user-friendly messages written to the database
         # Don't overwrite them - just re-raise
         print(f"[INFO] Expected error handled with user-friendly message: {type(e).__name__}")
         raise
 
     except Exception as e:
         # Only update status for truly unexpected errors
-        update_status(recording_path, "error", f"Unexpected error: {str(e)}")
+        update_recording_status(recording_id, "error", f"Unexpected error: {str(e)}")
         raise

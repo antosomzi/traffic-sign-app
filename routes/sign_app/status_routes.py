@@ -58,79 +58,58 @@ def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, 
         if not os.path.isdir(rec_folder):
             continue
 
-        # 1. Read status.json file 
-        status_file = os.path.join(rec_folder, "status.json")
-        current_status = "validated"
-        status_message = ""
-        timestamp = None
-        error_details = None
-        validation_status = "to_be_validated"
-
-        if os.path.isfile(status_file):
-            try:
-                with open(status_file, "r") as f:
-                    status_data = json.load(f)
-                    current_status = status_data.get("status", "validated")
-                    status_message = status_data.get("message", "")
-                    timestamp = status_data.get("timestamp", None)
-                    error_details = status_data.get("error_details", None)
-                    validation_status = status_data.get("validation_status", "to_be_validated")
-            except Exception:
-                pass
-        display_status = current_status
-        display_message = status_message
-        show_steps = False
+        # 1. Base DB Status (Default source of truth)
+        display_status = rec.status or "validated"
+        display_message = rec.status_message or ""
+        
+        # 2. Systematic step construction (Physical progress)
         step_status = []
-
-        if current_status == "processing":
-            result_root = os.path.join(rec_folder, "result_pipeline_stable")
-            
-            if not os.path.isdir(result_root):
-                display_message = status_message or "Processing in progress..."
-            else:
-                display_message = ""
-                show_steps = True
-                
-                for step in STEP_NAMES:
-                    filename = "supports.csv" if step == "s7_export_csv" else "output.json"
-                    output_file = os.path.join(result_root, step, filename)
-                    
-                    step_status.append({
-                        "name": step,
-                        "done": os.path.isfile(output_file)
-                    })
-
-        elif current_status == "error":
-            display_message = status_message or "Error during processing"
-            
-        elif current_status == "completed":
-            display_message = ""
-            
-        elif current_status == "validated":
-            display_message = status_message or "Awaiting processing"
-            
+        result_root = os.path.join(rec_folder, "result_pipeline_stable")
+        
+        if os.path.isdir(result_root):
+            for step in STEP_NAMES:
+                filename = "supports.csv" if step == "s7_export_csv" else "output.json"
+                is_done = os.path.isfile(os.path.join(result_root, step, filename))
+                step_status.append({"name": step, "done": is_done})
         else:
-            # Fallback de secours (Seulement si le statut est bizarre)
-            result_root = os.path.join(rec_folder, "result_pipeline_stable")
-            final_output = os.path.join(result_root, "s7_export_csv", "supports.csv")
-            
-            if os.path.isfile(final_output):
-                display_status = "completed"
-                display_message = ""
-            else:
-                display_status = current_status or "validated"
-                display_message = status_message or "Awaiting processing"
+            # If the results folder doesn't exist yet, all steps are set to False
+            step_status = [{"name": step, "done": False} for step in STEP_NAMES]
 
-        # 3. Ajout à la liste
+        # 3. Final status adjustment if DB is not yet updated
+        # We only override if the DB doesn't already indicate an error or completion
+        if display_status in ["validated", "processing"]:
+            all_done = all(s["done"] for s in step_status)
+            any_done = any(s["done"] for s in step_status)
+
+            if all_done:
+                display_status = "completed"
+                display_message = "" 
+            elif any_done:
+                display_status = "processing"
+                display_message = display_message or "Processing in progress..."
+            else:
+                display_message = display_message or "Awaiting processing"
+
+        elif display_status == "error":
+            display_message = display_message or "Error during processing"
+
+        # 4. Safe JSON error handling
+        error_details = None
+        if rec.error_details:
+            try:
+                error_details = json.loads(rec.error_details)
+            except Exception:
+                error_details = rec.error_details
+
+        # 5. Build response object
         all_records.append({
             "id": rec_id,
             "status": display_status,
             "message": display_message,
-            "timestamp": timestamp,
-            "show_steps": show_steps,
-            "steps": step_status if show_steps else None,
+            "timestamp": rec.status_timestamp.isoformat() if rec.status_timestamp else None,
+            "steps": step_status,  # UI decides whether to display based on status
             "error_details": error_details,
-            "validation_status": validation_status,
+            "validation_status": rec.validation_status or "to_be_validated",
             "model_history_name": rec.model_history_name,
             "user_id": rec.user_id,
             "uploader_name": rec.uploader_name,
@@ -139,8 +118,6 @@ def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, 
             "note": rec.note,
             "model_history_id": rec.model_history_id
         })
-
-    # Sorting is already handled by database query, no need to sort here
 
     return all_records
 
@@ -236,37 +213,21 @@ def toggle_validation(recording_id):
     validated = data.get('validated', True)
     
     # Check that recording is completed before allowing validation
-    rec_folder = os.path.join(Config.EXTRACT_FOLDER, recording_id)
-    status_file = os.path.join(rec_folder, "status.json")
-    
-    if not os.path.isfile(status_file):
-        return jsonify({"error": "Recording status not found"}), 404
-    
-    try:
-        with open(status_file, "r") as f:
-            status_data = json.load(f)
-    except Exception as e:
-        return jsonify({"error": f"Failed to read status: {str(e)}"}), 500
-    
-    # Check if pipeline is completed
-    current_status = status_data.get("status", "")
-    if current_status != "completed":
+    if recording.status != "completed":
         return jsonify({
             "error": "Only completed recordings can be validated",
-            "current_status": current_status
+            "current_status": recording.status
         }), 400
     
     # Update validation status
     new_validation_status = "validated" if validated else "to_be_validated"
-    status_data["validation_status"] = new_validation_status
-    status_data["validated_by"] = current_user.id if validated else None
-    status_data["validated_at"] = datetime.now().isoformat() if validated else None
     
-    try:
-        with open(status_file, "w") as f:
-            json.dump(status_data, f, indent=2)
-    except Exception as e:
-        return jsonify({"error": f"Failed to save status: {str(e)}"}), 500
+    Recording.update_status(
+        recording_id,
+        validation_status=new_validation_status,
+        validated_by=current_user.id if validated else None,
+        validated_at=datetime.now() if validated else None
+    )
     
     # Import or delete signs based on validation status
     signs_count = 0
@@ -326,10 +287,9 @@ def qaqc_redirect(recording_id):
     if recording.organization_id != current_user.organization_id:
         abort(403, description="Access denied")
         
-    # 2. Get status.json and output.json paths
+    # 2. Get output.json path
     rec_folder = os.path.join(Config.EXTRACT_FOLDER, recording_id)
-    status_file = os.path.join(rec_folder, "status.json")
-    
+
     # Path: result_pipeline_stable/s6_localization/output.json
     output_json_path = os.path.join(
         rec_folder,
@@ -337,32 +297,25 @@ def qaqc_redirect(recording_id):
         "s6_localization",
         "output.json",
     )
-    
-    if not os.path.exists(status_file):
-        flash("Status file not found for this recording.", "danger")
-        return redirect(url_for("status.list_recordings"))
-        
+
     if not os.path.exists(output_json_path):
         flash("Results (output.json) not found for this recording. Processing might not be complete.", "warning")
         return redirect(url_for("status.list_recordings"))
-        
+
     # 3. Read data
     try:
         print(f"[QA/QC] Starting export for recording: {recording_id}")
-        
-        with open(status_file, "r") as f:
-            status_data = json.load(f)
-        
+
         with open(output_json_path, "r") as f:
             output_data = json.load(f)
-            
+
         print(f"[QA/QC] output.json loaded. Type: {type(output_data)}, Keys: {list(output_data.keys()) if isinstance(output_data, dict) else 'Not a dict'}")
         if isinstance(output_data, dict) and "output" in output_data:
             print(f"[QA/QC] 'output' key found. Inner keys: {list(output_data['output'].keys()) if isinstance(output_data['output'], dict) else 'Not a dict'}")
         elif isinstance(output_data, dict):
             print(f"[QA/QC] WARNING: 'output' key NOT found in output_data. Actual keys: {list(output_data.keys())}")
-            
-        s3_key = status_data.get("video_s3_key")
+
+        s3_key = recording.video_s3_key
         print(f"[QA/QC] s3_key: {s3_key}")
         
         # 4. Prepare payload (Match exact QA/QC API format)

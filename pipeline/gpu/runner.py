@@ -14,35 +14,17 @@ from botocore.exceptions import WaiterError
 from pipeline.gpu.config import AWS_REGION, EFS_DNS, EFS_MOUNT_POINT, GPU_INSTANCE_ID
 from pipeline.gpu.diagnostics import capture_instance_diagnostics
 from services.sign_app.s3_service import S3VideoService, find_video_in_recording
+from models.sign_app.recording import Recording
 
 SSH_KEY_PATH = "/home/ec2-user/traffic-sign-inventory_keypair.pem"
 
 
-def _write_gpu_status(status_file, message):
-    """Update status.json from the orchestrator while preserving S3 metadata fields."""
+def _write_gpu_status(recording_id, message):
+    """Update recording status in the database from the orchestrator."""
     try:
-        existing_data = {}
-        try:
-            with open(status_file, "r") as f:
-                existing_data = json.load(f)
-        except Exception:
-            pass
-
-        status_data = {
-            "status": "processing",
-            "message": message,
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        if existing_data.get("video_s3_key"):
-            status_data["video_s3_key"] = existing_data["video_s3_key"]
-        if existing_data.get("camera_folder"):
-            status_data["camera_folder"] = existing_data["camera_folder"]
-
-        with open(status_file, "w") as f:
-            json.dump(status_data, f, indent=2)
-    except Exception as e:  # pragma: no cover - remote filesystem side effect
-        print(f"⚠️ Could not update status file: {e}")
+        Recording.update_status(recording_id, status="processing", message=message)
+    except Exception as e:
+        print(f"⚠️ Could not update status in DB: {e}")
 
 
 def _build_nvenc_encode_command(recording_path):
@@ -92,10 +74,9 @@ def _extract_vfr_score(ffmpeg_output: str) -> float | None:
 
 def _sync_encoded_video_to_s3(
     recording_path: str,
-    status_file: str,
     recording_id: str,
 ) -> tuple[bool, str]:
-    """Upload encoded camera video to S3 and persist S3 metadata in status.json."""
+    """Upload encoded camera video to S3 and persist S3 metadata in the database."""
 
     encoded_video_path = find_video_in_recording(recording_path)
     if not encoded_video_path or not os.path.exists(encoded_video_path):
@@ -105,18 +86,14 @@ def _sync_encoded_video_to_s3(
         s3_service = S3VideoService()
         s3_key = s3_service.upload_video(encoded_video_path, recording_id)
 
-        try:
-            with open(status_file, "r") as f:
-                status_data = json.load(f)
-        except Exception:
-            status_data = {}
-
         camera_folder = os.path.dirname(encoded_video_path)
-        status_data["video_s3_key"] = s3_key
-        status_data["camera_folder"] = os.path.relpath(camera_folder, recording_path)
+        camera_folder_relative = os.path.relpath(camera_folder, recording_path)
 
-        with open(status_file, "w") as f:
-            json.dump(status_data, f, indent=2)
+        Recording.update_status(
+            recording_id,
+            video_s3_key=s3_key,
+            camera_folder=camera_folder_relative
+        )
 
         return True, s3_key
     except Exception as e:
@@ -239,9 +216,8 @@ def start_and_run_pipeline_ssh(recording_id):
 
         # Mise à jour du statut
         recording_path = f"{EFS_MOUNT_POINT}/recordings/{recording_id}"
-        status_file = f"{recording_path}/status.json"
         try:
-            _write_gpu_status(status_file, "Re-encoding video on GPU (NVENC)...")
+            _write_gpu_status(recording_id, "Re-encoding video on GPU (NVENC)...")
         except Exception as status_err:
             print(f"[GPU] ⚠️ Impossible d'écrire le statut : {status_err}")
 
@@ -319,7 +295,6 @@ ls -la "{recording_path}"
 
         s3_sync_ok, s3_sync_message = _sync_encoded_video_to_s3(
             recording_path,
-            status_file,
             recording_id,
         )
         if not s3_sync_ok:
@@ -332,7 +307,7 @@ ls -la "{recording_path}"
             return False, GPU_INSTANCE_ID, "Failed to sync encoded video to S3", error_details
         print(f"✅ Encoded video synced to S3: {s3_sync_message}")
 
-        _write_gpu_status(status_file, "Pipeline running on GPU...")
+        _write_gpu_status(recording_id, "Pipeline running on GPU...")
 
         print("[GPU] Running real pipeline in Docker (may take several minutes)...")
         docker_cmd = (

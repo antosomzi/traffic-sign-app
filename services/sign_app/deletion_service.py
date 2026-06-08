@@ -6,6 +6,8 @@ import json
 import subprocess
 from typing import Dict, Tuple
 from config import Config
+from models.sign_app.recording import Recording
+from services.sign_app.s3_service import S3VideoService
 
 
 def can_delete_recording(recording_id: str) -> Tuple[bool, str]:
@@ -50,18 +52,14 @@ def delete_recording(recording_id: str) -> Dict[str, any]:
     
     try:
         # Delete video from S3 if it exists there
-        status_file = os.path.join(recording_path, "status.json")
-        if os.path.exists(status_file):
+        recording = Recording.get_by_id(recording_id)
+        
+        if recording and recording.video_s3_key:
             try:
-                with open(status_file, "r") as f:
-                    status_data = json.load(f)
-                    s3_key = status_data.get("video_s3_key")
-                    
-                    if s3_key:
-                        from services.sign_app.s3_service import S3VideoService
-                        s3_service = S3VideoService()
-                        s3_service.delete_video(s3_key)
-                        print(f"[DELETE] Video deleted from S3: {s3_key}")
+                s3_key = recording.video_s3_key
+                s3_service = S3VideoService()
+                s3_service.delete_video(s3_key)
+                print(f"[DELETE] Video deleted from S3: {s3_key}")
             except Exception as s3_error:
                 print(f"[DELETE] ⚠️ Could not delete video from S3: {s3_error}")
         

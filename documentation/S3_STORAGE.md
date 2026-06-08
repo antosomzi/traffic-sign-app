@@ -29,7 +29,7 @@ Environment is auto-detected: `/home/ec2-user` exists → `production`, otherwis
 UPLOAD
   └── Extract ZIP → Upload video to S3 → Delete local video
                           ↓
-              status.json: video_s3_key = "videos/production/<id>/video.mp4"
+              Database (recordings table): video_s3_key = "videos/production/<id>/video.mp4"
 
 PIPELINE
   └── Download video from S3 → Run pipeline → Delete local video

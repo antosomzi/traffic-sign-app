@@ -105,15 +105,15 @@ Each job's status is stored as a JSON object in Redis. Example attributes:
 
 ### How are Status and Results Linked?
 - The extraction job and the Celery pipeline task are linked by the `recording_id`:
-  - Extraction status is tracked by `job_id` (unique per upload)
-  - Pipeline status and results are tracked by the `status.json` file in the recording folder (and possibly by Celery task state if needed)
-- The frontend can poll `/status` or check the `status.json` to see pipeline progress after extraction is done.
+  - Extraction status is tracked by `job_id` (unique per upload) in Redis.
+  - Pipeline status and results are tracked in the database (specifically the `recordings` table) for the corresponding `recording_id`.
+- The frontend can poll `/status` or check the database record to see pipeline progress after extraction is done.
 
 ### Summary of Flow
 1. User uploads file → extraction job starts (tracked by `job_id`)
 2. Extraction completes → status set to `done` in Redis
 3. Celery task is queued for ML pipeline (using `recording_id`)
 4. Celery worker processes the task asynchronously
-5. Pipeline results and status are written to the recording folder
-6. User can download results or check status via the web interface
+5. Pipeline results are written to the recording folder, and status is updated in the database.
+6. User can download results or check status via the web interface (fetching data from the database).
 # Job Queue & Status Management in Traffic Sign ML Pipeline

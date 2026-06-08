@@ -318,14 +318,25 @@
             <!-- Charts -->
             <div class="info-group">
                 <h4>TimeSeries Analytics</h4>
-                <div class="chart-container">
-                    <canvas id="speedChart"></canvas>
+                <div style="margin-top: 15px;">
+                    <h5 style="font-size: 12px; color: #475569; margin-bottom: 5px;">Speed Profile</h5>
+                    <div class="chart-container">
+                        <canvas id="speedChart"></canvas>
+                    </div>
                 </div>
-                <div class="chart-container">
-                    <canvas id="superelevationChart"></canvas>
+                
+                <div style="margin-top: 20px;">
+                    <h5 style="font-size: 12px; color: #475569; margin-bottom: 5px;">Superelevation</h5>
+                    <div class="chart-container">
+                        <canvas id="superelevationChart"></canvas>
+                    </div>
                 </div>
-                <div class="chart-container">
-                    <canvas id="bbiChart"></canvas>
+
+                <div style="margin-top: 20px;">
+                    <h5 style="font-size: 12px; color: #475569; margin-bottom: 5px;">BBI Filtered</h5>
+                    <div class="chart-container">
+                        <canvas id="bbiChart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -498,9 +509,9 @@
         const bbiData = rec.bbiSeries.map(p => ({ x: p.distance_ft, y: p.bbi_filtered }));
 
         const configs = [
-            { id: 'speedChart', label: 'Speed (mph)', data: speedData, color: '#3b82f6', advisory: advisoryData },
-            { id: 'superelevationChart', label: 'Superelevation (%)', data: superData, color: '#f59e0b' },
-            { id: 'bbiChart', label: 'BBI Filtered', data: bbiData, color: '#10b981' }
+            { id: 'speedChart', label: 'Speed (mph)', yLabel: 'mph', data: speedData, color: '#3b82f6', advisory: advisoryData },
+            { id: 'superelevationChart', label: 'Superelevation (%)', yLabel: '%', data: superData, color: '#f59e0b' },
+            { id: 'bbiChart', label: 'BBI Filtered', yLabel: 'BBI', data: bbiData, color: '#10b981' }
         ];
 
         configs.forEach(conf => {
@@ -536,7 +547,10 @@
                     maintainAspectRatio: false,
                     scales: {
                         x: { type: 'linear', title: { display: true, text: 'Distance (ft)', font: { size: 10 } } },
-                        y: { beginAtZero: false }
+                        y: { 
+                            beginAtZero: false,
+                            title: { display: true, text: conf.yLabel, font: { size: 10 } }
+                        }
                     },
                     plugins: { 
                         legend: { 

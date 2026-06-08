@@ -11,6 +11,7 @@ from pipeline.post_processing import get_merged_signs_csv_path
 from services.sign_app.route_filtering_service import get_best_signs_csv_path
 from models.sign_app.recording import Recording
 from models.sign_app.organization import Organization
+from services.sign_app.s3_service import S3VideoService, get_camera_folder
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -74,16 +75,13 @@ def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
                     return os.path.join(root, f), False
     
     # No local video found - check if it's on S3
-    status_file = os.path.join(rec_folder, "status.json")
-    if os.path.exists(status_file):
+    recording_id = os.path.basename(rec_folder)
+    recording = Recording.get_by_id(recording_id)
+    
+    if recording:
         try:
-            import json
-            with open(status_file, 'r') as f:
-                status_data = json.load(f)
-            
-            s3_key = status_data.get('video_s3_key')
+            s3_key = recording.video_s3_key
             if s3_key:
-                from services.sign_app.s3_service import S3VideoService, get_camera_folder
                 s3_service = S3VideoService()
                 
                 # Find camera folder for download destination

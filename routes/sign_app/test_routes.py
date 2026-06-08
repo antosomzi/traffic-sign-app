@@ -6,6 +6,7 @@ from datetime import datetime
 from flask import Blueprint, jsonify
 
 from config import Config
+from models.sign_app.recording import Recording
 
 test_bp = Blueprint("test", __name__)
 
@@ -32,9 +33,6 @@ def simulate_error(recording_id):
             "message": f"Recording not found: {recording_id}"
         }), 404
     
-    # Simulate a realistic pipeline error with error_details
-    status_file = os.path.join(recording_path, "status.json")
-    
     error_details = {
         "error_type": "pipeline_execution_failed",
         "exit_code": 1,
@@ -56,30 +54,13 @@ def simulate_error(recording_id):
         "timestamp": datetime.now().isoformat(),
     }
     
-    # Load existing data to preserve video_s3_key and camera_folder
-    existing_data = {}
     try:
-        with open(status_file, "r") as f:
-            existing_data = json.load(f)
-    except Exception:
-        pass
-    
-    status_data = {
-        "status": "error",
-        "message": "Pipeline failed (exit 1)",
-        "timestamp": datetime.now().isoformat(),
-        "error_details": error_details
-    }
-    
-    # Preserve video_s3_key and camera_folder if they exist
-    if existing_data.get("video_s3_key"):
-        status_data["video_s3_key"] = existing_data["video_s3_key"]
-    if existing_data.get("camera_folder"):
-        status_data["camera_folder"] = existing_data["camera_folder"]
-    
-    try:
-        with open(status_file, "w") as f:
-            json.dump(status_data, f, indent=2)
+        Recording.update_status(
+            recording_id,
+            status="error",
+            message="Pipeline failed (exit 1)",
+            error_details=error_details
+        )
         
         return jsonify({
             "success": True,
@@ -90,5 +71,5 @@ def simulate_error(recording_id):
     except Exception as e:
         return jsonify({
             "success": False,
-            "message": f"Failed to write error status: {str(e)}"
+            "message": f"Failed to update error status in DB: {str(e)}"
         }), 500

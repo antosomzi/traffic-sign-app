@@ -7,7 +7,7 @@ This note documents the full polling workflow for the recording status page afte
   - Defined in `routes/status_routes.py`.
   - Calls `_collect_recordings()` to hydrate the list of recordings. That helper:
     - Lists every folder under `recordings/`.
-    - Reads `status.json` (when present) to capture `status`, `message`, and `timestamp`.
+    - Fetches recording information from the database (specifically the `recordings` table) to capture `status`, `status_message`, `status_timestamp`, `validation_status`, etc.
     - Inspects `result_pipeline_stable/s*/` folders to detect which pipeline steps have dropped outputs (e.g. `output.json`, `supports.csv`).
     - Compares output timestamps with the run timestamp to tell whether a step belongs to the current run.
     - Marks whether the final CSVs exist to decide if the recording is completed.
