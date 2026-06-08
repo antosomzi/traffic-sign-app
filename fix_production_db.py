@@ -10,7 +10,7 @@ import sys
 # Auto-detect environment
 if os.path.exists("/home/ec2-user"):
     RECORDINGS_ROOT = "/home/ec2-user/recordings"
-    DB_PATH = "/home/ec2-user/app/app.db"
+    DB_PATH = "/home/ec2-user/app.db"
 else:
     # Local development paths
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
