@@ -3,7 +3,7 @@ Curve routes for shared map data, curve detail, and ZIP upload.
 """
 from flask import Blueprint, jsonify, request, render_template
 from flask_login import current_user
-from decorators.auth_decorators import token_required, login_required
+from decorators.auth_decorators import token_required, login_required, auth_required
 
 from models.curve_analytic.curve import Curve
 from services.curve_analytic.ingestion import UploadValidationError, ingest_recording_zip
@@ -44,7 +44,7 @@ def get_curve(user, curve_id):
 
 
 @curves_bp.route("/upload", methods=["POST"])
-@login_required
+@auth_required
 def upload_curves():
     """ZIP upload for curve recordings."""
     uploaded_file = request.files.get("file")
