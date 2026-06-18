@@ -93,7 +93,7 @@ class Recording(Base):
     
 
     @staticmethod
-    def create(recording_id, organization_id, user_id=None, model_history_id=None):
+    def create(recording_id, organization_id, user_id=None, model_history_id=None, camera_folder=None):
         """Create a new recording entry"""
         recording_date = parse_recording_date(recording_id)
 
@@ -105,7 +105,8 @@ class Recording(Base):
                 model_history_id=model_history_id,
                 recording_date=recording_date,
                 status="processing",
-                validation_status="to_be_validated"
+                validation_status="to_be_validated",
+                camera_folder=camera_folder
             )
             session.add(recording)
             session.flush()
