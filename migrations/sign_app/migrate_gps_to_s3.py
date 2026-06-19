@@ -83,4 +83,4 @@ def migrate_gps_files(dry_run=True):
 
 
 if __name__ == "__main__":
-    migrate_gps_files()
+    migrate_gps_files(dry_run=False)
