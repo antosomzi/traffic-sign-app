@@ -56,10 +56,28 @@ Puisque S3 devient la source de vérité pour tous les fichiers (plus seulement 
 - **Logique** :
   1. Parcourir le dossier local `recordings/`.
   2. Pour chaque dossier (qui correspond au `recording_id`) :
+     - Vérifier que le préfixe (dossier S3) existe déjà dans S3.
      - Chercher le dossier `gps/` et les fichiers qu'il contient (ex: `data.json`, `gps.csv`).
      - Uploader ces fichiers vers S3 sous le préfixe `<prefix>/<recording_id>/<nom_du_fichier>`.
-  3. Mettre à jour la base de données si nécessaire pour indiquer que la migration S3 est complète pour cet enregistrement.
 - *Note : L'architecture S3 reflètera l'ID d'enregistrement, rendant la correspondance directe avec l'ancien système local parfaite.*
+
+### Exécution en Production
+
+Afin d'éviter de modifier le code de manière permanente (et faciliter une éventuelle resynchronisation future), le script est programmé pour tourner en **dry run par défaut**. 
+
+**1. Tester la migration (Dry Run) :**
+```bash
+source venv/bin/activate
+python migrations/sign_app/migrate_gps_to_s3.py
+```
+
+**2. Exécuter la migration réelle (SANS modifier le fichier) :**
+Pour effectuer la migration pour de vrai (`dry_run=False`), exécutez la commande en ligne suivante :
+```bash
+source venv/bin/activate
+python -c "from migrations.sign_app.migrate_gps_to_s3 import migrate_gps_files; migrate_gps_files(dry_run=False)"
+```
+Cela permet d'appliquer les changements sans altérer le comportement par défaut de sécurité du script.
 
 ---
 

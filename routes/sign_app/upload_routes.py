@@ -12,6 +12,7 @@ from services.sign_app.redis_service import RedisProgressService
 from services.sign_app.extraction_service import ExtractionService
 from services.sign_app.organization_service import OrganizationService
 from services.sign_app.s3_service import S3VideoService
+from services.sign_app.download_service import find_gps_files
 from models.sign_app.recording import Recording
 from utils.file_utils import allowed_file, update_recording_status
 
@@ -234,6 +235,23 @@ def upload_recording():
                     )
                     RedisProgressService.set_extraction_progress(job_id, latest_prog)
                 return
+
+            # --- Upload GPS files to S3 ---
+            try:
+                recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
+                gps_files = find_gps_files(recording_path)
+                if gps_files:
+                    print(f"☁️ Uploading {len(gps_files)} GPS files to S3 for {recording_id}...")
+                    s3_svc = S3VideoService()
+                    prefix = s3_svc.get_recording_prefix(recording_id)
+                    for local_path in gps_files:
+                        filename = os.path.basename(local_path)
+                        s3_key = f"{prefix}{filename}"
+                        s3_svc.s3_client.upload_file(local_path, s3_svc.bucket, s3_key)
+                        print(f"✅ Uploaded GPS file to S3: {s3_key}")
+            except Exception as e:
+                print(f"❌ Failed to upload GPS files to S3 for {recording_id}: {e}")
+            # ------------------------------
         except Exception as e:
             print(f"❌ Extraction process crashed for job_id {job_id}: {e}")
             latest_prog = RedisProgressService.get_extraction_progress(job_id) or {}
