@@ -141,6 +141,31 @@ class S3VideoService:
         except ClientError as e:
             print(f"❌ Failed to delete video from S3: {e}")
             return False
+
+    def delete_recording_files(self, recording_id: str) -> bool:
+        """
+        Delete all files associated with a recording (entire prefix folder) from S3.
+        """
+        prefix = self.get_recording_prefix(recording_id)
+        try:
+            print(f"🗑️ Deleting all S3 files for prefix: {prefix}")
+            
+            response = self.s3_client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            
+            if 'Contents' in response:
+                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                self.s3_client.delete_objects(
+                    Bucket=self.bucket,
+                    Delete={'Objects': objects_to_delete, 'Quiet': True}
+                )
+                print(f"✅ Deleted {len(objects_to_delete)} S3 objects for prefix: {prefix}")
+            else:
+                print(f"ℹ️ No S3 objects found for prefix: {prefix}")
+                
+            return True
+        except ClientError as e:
+            print(f"❌ Failed to delete recording files from S3: {e}")
+            return False
     
     def video_exists(self, s3_key: str) -> bool:
         """

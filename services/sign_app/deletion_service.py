@@ -51,17 +51,12 @@ def delete_recording(recording_id: str) -> Dict[str, any]:
     recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
     
     try:
-        # Delete video from S3 if it exists there
-        recording = Recording.get_by_id(recording_id)
-        
-        if recording and recording.video_s3_key:
-            try:
-                s3_key = recording.video_s3_key
-                s3_service = S3VideoService()
-                s3_service.delete_video(s3_key)
-                print(f"[DELETE] Video deleted from S3: {s3_key}")
-            except Exception as s3_error:
-                print(f"[DELETE] ⚠️ Could not delete video from S3: {s3_error}")
+        # Delete all recording files (video, GPS, etc.) from S3
+        try:
+            s3_service = S3VideoService()
+            s3_service.delete_recording_files(recording_id)
+        except Exception as s3_error:
+            print(f"[DELETE] ⚠️ Could not delete recording files from S3: {s3_error}")
         
         # Delete the recording folder with permission error handling
         if os.path.exists(recording_path):
