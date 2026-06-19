@@ -42,6 +42,24 @@ def migrate_gps_files(dry_run=True):
             
         prefix = s3_service.get_recording_prefix(recording_id)
         
+        # Check if the S3 folder (prefix) exists before uploading
+        try:
+            response = s3_service.s3_client.list_objects_v2(
+                Bucket=s3_service.bucket,
+                Prefix=prefix,
+                MaxKeys=1
+            )
+            prefix_exists = 'Contents' in response
+        except Exception as e:
+            print(f"❌ Error checking S3 for {recording_id}: {e}")
+            continue
+
+        if not prefix_exists:
+            print(f"⏭️  [SKIPPED] No S3 folder found for {recording_id} (Prefix: {prefix}).")
+            continue
+        else:
+            print(f"📁 [FOUND] S3 folder exists for {recording_id} (Prefix: {prefix}). Proceeding to upload.")
+        
         for local_path in gps_files:
             filename = os.path.basename(local_path)
                 
