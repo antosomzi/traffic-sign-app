@@ -15,6 +15,51 @@ class S3VideoService:
         self.bucket = Config.S3_BUCKET_NAME
         self.prefix = Config.S3_VIDEO_PREFIX
     
+    def get_recording_prefix(self, recording_id: str) -> str:
+        """Standardized S3 prefix for all files of a recording."""
+        return f"{self.prefix}{recording_id}/"
+
+    def generate_presigned_post(self, s3_key: str, content_type: str = "application/octet-stream", max_size: int = 5368709120) -> dict:
+        """
+        Generate a presigned POST URL for direct upload from client.
+        
+        Args:
+            s3_key: Destination S3 key
+            content_type: Expected MIME type
+            max_size: Maximum file size in bytes (default 5GB)
+            
+        Returns:
+            Dictionary with 'url' and 'fields' for the POST request
+        """
+        try:
+            response = self.s3_client.generate_presigned_post(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Fields={"acl": "private", "Content-Type": content_type},
+                Conditions=[
+                    {"acl": "private"},
+                    {"Content-Type": content_type},
+                    ["content-length-range", 1, max_size]
+                ],
+                ExpiresIn=3600
+            )
+            return response
+        except ClientError as e:
+            print(f"❌ Error generating presigned POST: {e}")
+            return None
+
+    def download_file(self, s3_key: str, local_path: str) -> bool:
+        """
+        Download any file from S3 to a local path.
+        """
+        try:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            self.s3_client.download_file(self.bucket, s3_key, local_path)
+            return True
+        except Exception as e:
+            print(f"❌ Error downloading file {s3_key}: {e}")
+            return False
+
     def upload_video(self, local_path: str, recording_id: str) -> str:
         """
         Upload video file to S3.
@@ -95,6 +140,31 @@ class S3VideoService:
             return True
         except ClientError as e:
             print(f"❌ Failed to delete video from S3: {e}")
+            return False
+
+    def delete_recording_files(self, recording_id: str) -> bool:
+        """
+        Delete all files associated with a recording (entire prefix folder) from S3.
+        """
+        prefix = self.get_recording_prefix(recording_id)
+        try:
+            print(f"🗑️ Deleting all S3 files for prefix: {prefix}")
+            
+            response = self.s3_client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            
+            if 'Contents' in response:
+                objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+                self.s3_client.delete_objects(
+                    Bucket=self.bucket,
+                    Delete={'Objects': objects_to_delete, 'Quiet': True}
+                )
+                print(f"✅ Deleted {len(objects_to_delete)} S3 objects for prefix: {prefix}")
+            else:
+                print(f"ℹ️ No S3 objects found for prefix: {prefix}")
+                
+            return True
+        except ClientError as e:
+            print(f"❌ Failed to delete recording files from S3: {e}")
             return False
     
     def video_exists(self, s3_key: str) -> bool:

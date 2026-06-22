@@ -11,7 +11,10 @@ from config import Config
 from services.sign_app.redis_service import RedisProgressService
 from services.sign_app.extraction_service import ExtractionService
 from services.sign_app.organization_service import OrganizationService
-from utils.file_utils import allowed_file
+from services.sign_app.s3_service import S3VideoService
+from services.sign_app.download_service import find_gps_files
+from models.sign_app.recording import Recording
+from utils.file_utils import allowed_file, update_recording_status
 
 # Check if Celery is available
 try:
@@ -32,6 +35,95 @@ extraction_service = ExtractionService()
 def index():
     """Render the upload page"""
     return render_template("upload.html")
+
+
+@upload_bp.route("/upload/init", methods=["POST"])
+@auth_required
+def init_upload():
+    """Initialize S3 upload and return presigned URLs."""
+    data = request.json
+    recording_id = data.get("recording_id")
+    files = data.get("files", [])  # List of filenames like ["video.mp4", "gps.json"]
+
+    if not recording_id:
+        return jsonify({"error": "recording_id is required"}), 400
+    
+    # Check if recording already exists
+    if Recording.exists(recording_id):
+        return jsonify({"error": f"Recording {recording_id} already exists"}), 400
+
+    s3_service = S3VideoService()
+    prefix = s3_service.get_recording_prefix(recording_id)
+    
+    presigned_urls = {}
+    for filename in files:
+        s3_key = f"{prefix}{filename}"
+        # Determine content type based on extension
+        content_type = "application/octet-stream"
+        if filename.lower().endswith(".mp4"):
+            content_type = "video/mp4"
+        elif filename.lower().endswith((".json", ".csv", ".txt")):
+            content_type = "application/json" if filename.endswith(".json") else "text/plain"
+        
+        presigned_data = s3_service.generate_presigned_post(s3_key, content_type=content_type)
+        if presigned_data:
+            presigned_urls[filename] = presigned_data
+
+    return jsonify({
+        "recording_id": recording_id,
+        "presigned_urls": presigned_urls
+    })
+
+
+@upload_bp.route("/upload/complete", methods=["POST"])
+@auth_required
+def complete_upload():
+    """Notify server that S3 upload is complete and trigger processing."""
+    data = request.json
+    recording_id = data.get("recording_id")
+    camera_folder = data.get("camera_folder")
+    
+    if not recording_id:
+        return jsonify({"error": "recording_id is required"}), 400
+
+    # Capture organization_id AND user_id
+    user_organization_id = current_user.organization_id
+    user_id = current_user.id
+
+    # Create recording entry in DB if it doesn't exist
+    if not Recording.exists(recording_id):
+        Recording.create(
+            recording_id=recording_id,
+            organization_id=user_organization_id,
+            user_id=user_id,
+            camera_folder=camera_folder
+        )
+    else:
+        # If the recording already exists, ensure we update its camera_folder
+        if camera_folder:
+            Recording.update_status(recording_id, camera_folder=camera_folder)
+    
+    # Initialize Redis progress
+    job_id = uuid.uuid4().hex
+    initial_progress = {
+        "status": "pending",
+        "phase": "downloading",
+        "progress_percent": 5,
+        "recording_id": recording_id
+    }
+    RedisProgressService.set_extraction_progress(job_id, initial_progress)
+
+    # Trigger Celery task
+    if CELERY_AVAILABLE:
+        run_pipeline_task.delay(recording_id)
+        return jsonify({
+            "status": "success",
+            "message": "Processing triggered",
+            "job_id": job_id,
+            "recording_id": recording_id
+        })
+    else:
+        return jsonify({"error": "Celery not available for processing"}), 503
 
 
 @upload_bp.route("/upload", methods=["POST"])
@@ -143,6 +235,23 @@ def upload_recording():
                     )
                     RedisProgressService.set_extraction_progress(job_id, latest_prog)
                 return
+
+            # --- Upload GPS files to S3 ---
+            try:
+                recording_path = os.path.join(Config.EXTRACT_FOLDER, recording_id)
+                gps_files = find_gps_files(recording_path)
+                if gps_files:
+                    print(f"☁️ Uploading {len(gps_files)} GPS files to S3 for {recording_id}...")
+                    s3_svc = S3VideoService()
+                    prefix = s3_svc.get_recording_prefix(recording_id)
+                    for local_path in gps_files:
+                        filename = os.path.basename(local_path)
+                        s3_key = f"{prefix}{filename}"
+                        s3_svc.s3_client.upload_file(local_path, s3_svc.bucket, s3_key)
+                        print(f"✅ Uploaded GPS file to S3: {s3_key}")
+            except Exception as e:
+                print(f"❌ Failed to upload GPS files to S3 for {recording_id}: {e}")
+            # ------------------------------
         except Exception as e:
             print(f"❌ Extraction process crashed for job_id {job_id}: {e}")
             latest_prog = RedisProgressService.get_extraction_progress(job_id) or {}

@@ -34,67 +34,67 @@ RECORDINGS_PATH = os.path.join(BASE_PATH, "recordings")
 USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
 
 
-def download_video_from_s3(recording_id):
-    """Download video from S3 if it was uploaded there.
-    
-    Args:
-        recording_id: The unique recording identifier
-        
-    Returns:
-        Path to local video file or None if no S3 video
+def prepare_recording_from_s3(recording_id):
     """
-    recording = Recording.get_by_id(recording_id)
-    
-    if not recording:
-        return None
-    
+    Download all necessary files (video, GPS) from S3 to EFS.
+    Preserves original filenames and updates status in DB.
+    """
     recording_path = os.path.join(RECORDINGS_PATH, recording_id)
-    
-    try:
-        s3_key = recording.video_s3_key
-        
-        if not s3_key:
-            return None
-        
-        # Get camera folder path from DB
-        camera_folder_relative = recording.camera_folder
-        
-        if not camera_folder_relative:
-            # Fallback: try to find camera folder
-            camera_folder = get_camera_folder(recording_path)
-            if not camera_folder:
-                return None
-        else:
-            # Use stored path
-            camera_folder = os.path.join(recording_path, camera_folder_relative)
-        
-        # Create camera folder if it doesn't exist
-        os.makedirs(camera_folder, exist_ok=True)
-        
-        # Use imported S3VideoService
-        s3_service = S3VideoService()
-        
-        local_video_path = os.path.join(camera_folder, os.path.basename(s3_key))
-        
-        # Download from S3
-        success = s3_service.download_video(s3_key, local_video_path)
-        
-        if success and os.path.exists(local_video_path):
-            return local_video_path
-        else:
-            return None
-            
-    except Exception as e:
-        print(f"[S3] ❌ Error downloading video: {e}", flush=True)
-        return None
+    os.makedirs(recording_path, exist_ok=True)
 
+    update_recording_status(recording_id, "processing", "Downloading files from S3...")
+
+    s3_service = S3VideoService()
+    prefix = s3_service.get_recording_prefix(recording_id)
+
+    # Fetch recording from DB to get the saved camera_folder (e.g. device_id/imei/camera)
+    recording = Recording.get_by_id(recording_id)
+    base_folder_structure = ""
+    if recording and recording.camera_folder:
+        # Normalize separators just in case
+        camera_folder_clean = recording.camera_folder.replace('\\', '/')
+        camera_path_parts = camera_folder_clean.split('/')
+        if camera_path_parts and camera_path_parts[-1] == "camera":
+            base_folder_structure = os.sep.join(camera_path_parts[:-1])
+        else:
+            base_folder_structure = os.sep.join(camera_path_parts)
+
+    # List objects to find original filenames
+    response = s3_service.s3_client.list_objects_v2(Bucket=s3_service.bucket, Prefix=prefix)
+
+    video_path = None
+    for obj in response.get('Contents', []):
+        s3_key = obj['Key']
+        filename = os.path.basename(s3_key)
+        if not filename: continue
+
+        # Since files on S3 are flat, we recreate the correct structure based on DB metadata
+        if filename.lower().endswith(".mp4"):
+            subfolder = "camera"
+        else:
+            subfolder = "location"
+
+        if base_folder_structure:
+            relative_path = os.path.join(base_folder_structure, subfolder, filename)
+        else:
+            relative_path = os.path.join(subfolder, filename)
+
+        local_path = os.path.join(recording_path, relative_path)
+        local_dir = os.path.dirname(local_path)
+        os.makedirs(local_dir, exist_ok=True)
+
+        if s3_service.download_file(s3_key, local_path):
+            print(f"[S3] Downloaded {filename} to {local_path}")
+            if subfolder == "camera":
+                video_path = local_path
+                # Update DB with the actual S3 key used
+                camera_folder_relative = os.path.relpath(local_dir, recording_path)
+                Recording.update_status(recording_id, video_s3_key=s3_key, camera_folder=camera_folder_relative)
+
+    return video_path
 
 def cleanup_local_video(video_path):
-    """Remove local video after pipeline completes to save EFS space.
-    
-    Args:
-        video_path: Path to local video file
-    """
+    """Remove local video after pipeline completes to save EFS space."""
     if video_path and os.path.exists(video_path):
         try:
             os.remove(video_path)
@@ -115,10 +115,10 @@ def run_pipeline_local(recording_id, recording_path):
     try:
         # Check if recording still exists before starting
         if not os.path.exists(recording_path):
-            return f"Recording {recording_id} was deleted before pipeline started"
+            os.makedirs(recording_path, exist_ok=True)
         
-        # Download video from S3 if needed
-        # local_video_path = download_video_from_s3(recording_id)
+        # Download files from S3
+        local_video_path = prepare_recording_from_s3(recording_id)
         
         # Check again after download
         if not os.path.exists(recording_path):
@@ -194,10 +194,10 @@ def run_pipeline_gpu(recording_id, recording_path):
     try:
         # Check if recording still exists before starting
         if not os.path.exists(recording_path):
-            return f"Recording {recording_id} was deleted before pipeline started"
+            os.makedirs(recording_path, exist_ok=True)
         
-        # Download video from S3 to EFS before launching GPU (GPU mounts EFS)
-        local_video_path = download_video_from_s3(recording_id)
+        # Download files from S3 to EFS before launching GPU (GPU mounts EFS)
+        local_video_path = prepare_recording_from_s3(recording_id)
         
         # Check again after download (user might have deleted during download)
         if not os.path.exists(recording_path):
@@ -267,7 +267,7 @@ def run_pipeline_gpu(recording_id, recording_path):
         add_confidence_to_merged_signs_csv(recording_path)
 
         # Enrich output.json with root-level filtered cluster IDs (if filtered CSV exists)
-        filter_output_json(recording_path,recording_id)
+        filter_output_json(recording_path, recording_id)
         
         # Cleanup local video after successful pipeline (save EFS space)
         cleanup_local_video(local_video_path)
@@ -285,19 +285,11 @@ def run_pipeline_gpu(recording_id, recording_path):
 
 
 @celery.task
-def run_pipeline_task(recording_id):
+def run_pipeline_task(recording_id, job_id=None):
     """Runs the ML pipeline on a given recording folder."""
     recording_path = os.path.join(RECORDINGS_PATH, recording_id)
 
     print(f"[INFO] Starting pipeline for recording: {recording_id}")
-    print(f"[INFO] Recording path: {recording_path}")
-    print(f"[INFO] GPU mode: {USE_GPU_INSTANCE}")
-
-    if not os.path.isdir(recording_path):
-        if os.path.isdir(RECORDINGS_PATH):
-            available = os.listdir(RECORDINGS_PATH)
-            print(f"[DEBUG] Available recordings: {available}")
-        raise FileNotFoundError(f"Recording not found: {recording_id}")
 
     try:
         # Choose execution mode
@@ -312,7 +304,6 @@ def run_pipeline_task(recording_id):
 
     except (FileNotFoundError, TimeoutError) as e:
         # These exceptions already have user-friendly messages written to the database
-        # Don't overwrite them - just re-raise
         print(f"[INFO] Expected error handled with user-friendly message: {type(e).__name__}")
         raise
 
