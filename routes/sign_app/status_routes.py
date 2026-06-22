@@ -114,7 +114,7 @@ def _collect_recordings(organization_id, user_ids=None, model_history_ids=None, 
             "status": display_status,
             "message": display_message,
             "timestamp": rec.status_timestamp.isoformat() if rec.status_timestamp else None,
-            "show_steps": display_status in ["processing", "error"], # UI decides whether to display
+            "show_steps": display_status == "processing", # UI decides whether to display
             "steps": step_status,
             "error_details": error_details,
             "validation_status": rec.validation_status or "to_be_validated",
