@@ -86,13 +86,9 @@ def _sync_encoded_video_to_s3(
         s3_service = S3VideoService()
         s3_key = s3_service.upload_video(encoded_video_path, recording_id)
 
-        camera_folder = os.path.dirname(encoded_video_path)
-        camera_folder_relative = os.path.relpath(camera_folder, recording_path)
-
         Recording.update_status(
             recording_id,
             video_s3_key=s3_key,
-            camera_folder=camera_folder_relative
         )
 
         return True, s3_key

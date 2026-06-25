@@ -17,7 +17,7 @@ from pipeline.post_processing import generate_merged_signs_csv
 from services.sign_app.confidence import add_confidence_to_merged_signs_csv
 from services.sign_app.filtered_output_json import filter_output_json
 from services.sign_app.route_filtering_service import filter_signs_by_org_routes
-from services.sign_app.s3_service import S3VideoService, get_camera_folder
+from services.sign_app.s3_service import S3VideoService
 from models.sign_app.recording import Recording
 from utils.file_utils import update_recording_status
 
@@ -34,10 +34,18 @@ RECORDINGS_PATH = os.path.join(BASE_PATH, "recordings")
 USE_GPU_INSTANCE = os.getenv("USE_GPU_INSTANCE", "false").lower() == "true"
 
 
+# Default folder structure expected by the pipeline Docker container.
+# Structure: recordings/<recording_id>/<DEFAULT_FOLDER_STRUCTURE>/camera/video.mp4
+#                                      <DEFAULT_FOLDER_STRUCTURE>/location/gps.json
+DEFAULT_FOLDER_STRUCTURE = os.path.join("0", "IMEINotAvailable")
+
+
 def prepare_recording_from_s3(recording_id):
     """
     Download all necessary files (video, GPS) from S3 to EFS.
-    Preserves original filenames and updates status in DB.
+    Recreates the folder structure expected by the pipeline:
+        <recording_id>/0/IMEINotAvailable/camera/video.mp4
+        <recording_id>/0/IMEINotAvailable/location/gps.json
     """
     recording_path = os.path.join(RECORDINGS_PATH, recording_id)
     os.makedirs(recording_path, exist_ok=True)
@@ -46,18 +54,6 @@ def prepare_recording_from_s3(recording_id):
 
     s3_service = S3VideoService()
     prefix = s3_service.get_recording_prefix(recording_id)
-
-    # Fetch recording from DB to get the saved camera_folder (e.g. device_id/imei/camera)
-    recording = Recording.get_by_id(recording_id)
-    base_folder_structure = ""
-    if recording and recording.camera_folder:
-        # Normalize separators just in case
-        camera_folder_clean = recording.camera_folder.replace('\\', '/')
-        camera_path_parts = camera_folder_clean.split('/')
-        if camera_path_parts and camera_path_parts[-1] == "camera":
-            base_folder_structure = os.sep.join(camera_path_parts[:-1])
-        else:
-            base_folder_structure = os.sep.join(camera_path_parts)
 
     # List objects to find original filenames
     response = s3_service.s3_client.list_objects_v2(Bucket=s3_service.bucket, Prefix=prefix)
@@ -68,17 +64,13 @@ def prepare_recording_from_s3(recording_id):
         filename = os.path.basename(s3_key)
         if not filename: continue
 
-        # Since files on S3 are flat, we recreate the correct structure based on DB metadata
+        # Since files on S3 are flat, we recreate the correct structure
         if filename.lower().endswith(".mp4"):
             subfolder = "camera"
         else:
             subfolder = "location"
 
-        if base_folder_structure:
-            relative_path = os.path.join(base_folder_structure, subfolder, filename)
-        else:
-            relative_path = os.path.join(subfolder, filename)
-
+        relative_path = os.path.join(DEFAULT_FOLDER_STRUCTURE, subfolder, filename)
         local_path = os.path.join(recording_path, relative_path)
         local_dir = os.path.dirname(local_path)
         os.makedirs(local_dir, exist_ok=True)
@@ -88,8 +80,7 @@ def prepare_recording_from_s3(recording_id):
             if subfolder == "camera":
                 video_path = local_path
                 # Update DB with the actual S3 key used
-                camera_folder_relative = os.path.relpath(local_dir, recording_path)
-                Recording.update_status(recording_id, video_s3_key=s3_key, camera_folder=camera_folder_relative)
+                Recording.update_status(recording_id, video_s3_key=s3_key)
 
     return video_path
 

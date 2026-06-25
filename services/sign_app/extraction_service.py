@@ -76,15 +76,12 @@ class ExtractionService:
         return encode_video_cfr_semi_all_intra(video_path)
 
     def _update_status_with_s3_metadata(self, final_path, video_path, s3_key):
-        """Persist S3 metadata (key + camera folder) in the database."""
-        camera_folder = os.path.dirname(video_path)
-        camera_folder_relative = os.path.relpath(camera_folder, final_path)
+        """Persist S3 metadata (key) in the database."""
         recording_id = os.path.basename(final_path)
 
         Recording.update_status(
             recording_id, 
             video_s3_key=s3_key, 
-            camera_folder=camera_folder_relative
         )
 
     @staticmethod

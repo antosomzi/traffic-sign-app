@@ -81,7 +81,6 @@ def complete_upload():
     """Notify server that S3 upload is complete and trigger processing."""
     data = request.json
     recording_id = data.get("recording_id")
-    camera_folder = data.get("camera_folder")
     
     if not recording_id:
         return jsonify({"error": "recording_id is required"}), 400
@@ -95,13 +94,8 @@ def complete_upload():
         Recording.create(
             recording_id=recording_id,
             organization_id=user_organization_id,
-            user_id=user_id,
-            camera_folder=camera_folder
+            user_id=user_id
         )
-    else:
-        # If the recording already exists, ensure we update its camera_folder
-        if camera_folder:
-            Recording.update_status(recording_id, camera_folder=camera_folder)
     
     # Initialize Redis progress
     job_id = uuid.uuid4().hex

@@ -66,7 +66,7 @@ class Recording(Base):
     status = Column(String, default="processing")
     status_message = Column(Text)
     status_timestamp = Column(DateTime, server_default=func.current_timestamp())
-    camera_folder = Column(String)
+
     error_details = Column(Text)  # Stores JSON string
     validation_status = Column(String, default="to_be_validated")
     validated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -93,7 +93,7 @@ class Recording(Base):
     
 
     @staticmethod
-    def create(recording_id, organization_id, user_id=None, model_history_id=None, camera_folder=None):
+    def create(recording_id, organization_id, user_id=None, model_history_id=None):
         """Create a new recording entry"""
         recording_date = parse_recording_date(recording_id)
 
@@ -105,8 +105,7 @@ class Recording(Base):
                 model_history_id=model_history_id,
                 recording_date=recording_date,
                 status="processing",
-                validation_status="to_be_validated",
-                camera_folder=camera_folder
+                validation_status="to_be_validated"
             )
             session.add(recording)
             session.flush()
@@ -120,7 +119,7 @@ class Recording(Base):
             return session.get(Recording, recording_id)
         
     @staticmethod
-    def update_status(recording_id, status=None, message=None, error_details=None, camera_folder=None, video_s3_key=None, validation_status=None, validated_by=None, validated_at=None):
+    def update_status(recording_id, status=None, message=None, error_details=None, video_s3_key=None, validation_status=None, validated_by=None, validated_at=None):
         """Update recording status and metadata in DB"""
         import json
         updates = {}
@@ -130,8 +129,7 @@ class Recording(Base):
             updates["status_message"] = message
         if error_details is not None:
             updates["error_details"] = json.dumps(error_details) if isinstance(error_details, (dict, list)) else error_details
-        if camera_folder:
-            updates["camera_folder"] = camera_folder
+
         if video_s3_key:
             updates["video_s3_key"] = video_s3_key
         if validation_status:
