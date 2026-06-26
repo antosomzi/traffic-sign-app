@@ -11,7 +11,8 @@ from pipeline.post_processing import get_merged_signs_csv_path
 from services.sign_app.route_filtering_service import get_best_signs_csv_path
 from models.sign_app.recording import Recording
 from models.sign_app.organization import Organization
-from services.sign_app.s3_service import S3VideoService, get_camera_folder
+from services.sign_app.s3_service import S3VideoService
+from pipeline.celery_tasks import DEFAULT_FOLDER_STRUCTURE
 
 
 def get_recording_folder(recording_id: str) -> str:
@@ -51,14 +52,30 @@ def get_json_file(rec_folder: str) -> str:
 
 
 def find_gps_files(rec_folder: str) -> List[str]:
-    """Find all GPS CSV files in the location folder."""
+    """Download GPS CSV files from S3 for a recording."""
     gps_files = []
+    recording_id = os.path.basename(rec_folder)
     
-    for root, dirs, files in os.walk(rec_folder):
-        if "location" in root:
-            for f in files:
-                if f.endswith(".csv"):
-                    gps_files.append(os.path.join(root, f))
+    try:
+        s3_service = S3VideoService()
+        prefix = s3_service.get_recording_prefix(recording_id)
+        response = s3_service.s3_client.list_objects_v2(Bucket=s3_service.bucket, Prefix=prefix)
+        
+        location_folder = os.path.join(rec_folder, DEFAULT_FOLDER_STRUCTURE, "location")
+        
+        for obj in response.get('Contents', []):
+            s3_key = obj['Key']
+            filename = os.path.basename(s3_key)
+            if not filename or not filename.lower().endswith(".csv"):
+                continue
+            
+            os.makedirs(location_folder, exist_ok=True)
+            local_path = os.path.join(location_folder, filename)
+            if s3_service.download_file(s3_key, local_path):
+                print(f"📥 Downloaded GPS file from S3: {filename}")
+                gps_files.append(local_path)
+    except Exception as e:
+        print(f"⚠️ Error downloading GPS files from S3: {e}")
     
     return gps_files
 
@@ -67,14 +84,14 @@ def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
     """Find the MP4 video file - check local EFS first, then download from S3.
     Returns: (path_to_video, is_temporary)
     """
-    # Check local EFS first
+    # Check local EFS first (video may still be present for legacy recordings)
     for root, dirs, files in os.walk(rec_folder):
         if "camera" in root:
             for f in files:
                 if f.endswith(".mp4"):
                     return os.path.join(root, f), False
     
-    # No local video found - check if it's on S3
+    # No local video found - download from S3 into the standard folder structure
     recording_id = os.path.basename(rec_folder)
     recording = Recording.get_by_id(recording_id)
     
@@ -84,21 +101,15 @@ def find_video_file(rec_folder: str) -> tuple[Optional[str], bool]:
             if s3_key:
                 s3_service = S3VideoService()
                 
-                # Find camera folder for download destination
-                camera_folder = get_camera_folder(rec_folder)
-                if not camera_folder:
-                    # Try to find IMEI folder and create camera subfolder
-                    for root, dirs, files in os.walk(rec_folder):
-                        if "IMEINotAvailable" in root or root.count(os.sep) - rec_folder.count(os.sep) == 2:
-                            camera_folder = os.path.join(root, "camera")
-                            os.makedirs(camera_folder, exist_ok=True)
-                            break
+                # Use the standard folder structure: 0/IMEINotAvailable/camera/
+                from pipeline.celery_tasks import DEFAULT_FOLDER_STRUCTURE
+                camera_folder = os.path.join(rec_folder, DEFAULT_FOLDER_STRUCTURE, "camera")
+                os.makedirs(camera_folder, exist_ok=True)
                 
-                if camera_folder:
-                    local_path = os.path.join(camera_folder, os.path.basename(s3_key))
-                    print(f"📥 Downloading video from S3 for download...")
-                    if s3_service.download_video(s3_key, local_path):
-                        return local_path, True
+                local_path = os.path.join(camera_folder, os.path.basename(s3_key))
+                print(f"📥 Downloading video from S3 for download...")
+                if s3_service.download_video(s3_key, local_path):
+                    return local_path, True
         except ValueError as ve:
             # Re-raise the ValueError so the route can handle it
             raise ve
