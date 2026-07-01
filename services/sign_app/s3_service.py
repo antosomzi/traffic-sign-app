@@ -48,6 +48,36 @@ class S3VideoService:
             print(f"❌ Error generating presigned POST: {e}")
             return None
 
+    def generate_presigned_get(self, s3_key: str, expiration: int = 3600, filename: str = None) -> str | None:
+        """
+        Generate a presigned GET URL for direct download from S3.
+        
+        Args:
+            s3_key: S3 key of the file to download
+            expiration: URL expiration time in seconds (default 1 hour)
+            filename: Optional filename for Content-Disposition header
+            
+        Returns:
+            Presigned URL string, or None on error
+        """
+        try:
+            params = {
+                'Bucket': self.bucket,
+                'Key': s3_key,
+            }
+            if filename:
+                params['ResponseContentDisposition'] = f'attachment; filename="{filename}"'
+            
+            url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params=params,
+                ExpiresIn=expiration
+            )
+            return url
+        except ClientError as e:
+            print(f"❌ Error generating presigned GET: {e}")
+            return None
+
     def download_file(self, s3_key: str, local_path: str) -> bool:
         """
         Download any file from S3 to a local path.

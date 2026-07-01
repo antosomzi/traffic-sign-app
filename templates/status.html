@@ -986,7 +986,7 @@
                 
                 {% if rec.status == "completed" %}
                 <div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; align-items: center;">
-                    <a href="/download/{{ rec.id }}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
+                    <button onclick="downloadFromS3('{{ rec.id }}')" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</button>
                     <a href="/download/{{ rec.id }}/csv-only" class="download-btn">📊 Download CSV Only</a>
                 </div>
                 {% endif %}
@@ -1487,7 +1487,7 @@
             
             const downloadLink = rec.status === 'completed'
                 ? `<div style="display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; align-items: center;">
-                    <a href="/download/${encodeURIComponent(rec.id)}" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</a>
+                    <button onclick="downloadFromS3('${rec.id}')" class="download-btn">📥 Download Full Results (CSV + Video + GPS)</button>
                     <a href="/download/${encodeURIComponent(rec.id)}/csv-only" class="download-btn">📊 Download CSV Only</a>
                    </div>`
                 : '';
@@ -2092,6 +2092,51 @@
             } else {
                 detailsDiv.style.display = 'none';
                 button.textContent = '🔍 Show Technical Details';
+            }
+        };
+
+        // Download all recording files: video+GPS from S3, CSV+JSON from server
+        window.downloadFromS3 = async function(recordingId) {
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ Preparing download...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/download/${encodeURIComponent(recordingId)}/urls`);
+                if (!res.ok) {
+                    throw new Error(`Server error: ${res.status}`);
+                }
+                const data = await res.json();
+
+                // Collect all download URLs
+                const allFiles = [];
+                if (data.files.video) allFiles.push(data.files.video.url);
+                data.files.gps.forEach(gps => allFiles.push(gps.url));
+                
+                // Also add the ZIP download for CSV and JSON
+                allFiles.push(`/download/${encodeURIComponent(recordingId)}`);
+
+                if (allFiles.length === 0) {
+                    alert('No files found for this recording.');
+                    return;
+                }
+
+                // Download each file via a hidden iframe (avoids navigation and popup blockers)
+                for (let i = 0; i < allFiles.length; i++) {
+                    if (i > 0) await new Promise(r => setTimeout(r, 1000));
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = allFiles[i];
+                    document.body.appendChild(iframe);
+                    // L'iframe n'est pas supprimée pour ne pas annuler le téléchargement
+                }
+            } catch (err) {
+                console.error('Download error:', err);
+                alert('Download failed: ' + err.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
             }
         };
     </script>

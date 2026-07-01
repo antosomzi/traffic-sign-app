@@ -1,6 +1,7 @@
 """Download routes for retrieving processing results"""
 
-from flask import Blueprint, send_file, abort, request, flash, redirect, url_for
+import os
+from flask import Blueprint, send_file, abort, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from decorators.auth_decorators import api_key_required
 from services.sign_app.download_service import (
@@ -13,6 +14,8 @@ from services.sign_app.download_service import (
     create_multi_recordings_csv_zip
 )
 from services.sign_app.organization_service import OrganizationService
+from services.sign_app.s3_service import S3VideoService
+from models.sign_app.recording import Recording
 from datetime import datetime
 
 download_bp = Blueprint("download", __name__)
@@ -31,14 +34,10 @@ def download_zip(recording_id):
     # Get JSON file
     json_file = get_json_file(rec_folder)
     
-    # Find GPS and video files
-    gps_files = find_gps_files(rec_folder)
-    
-    try:
-        video_file_info = find_video_file(rec_folder)
-    except ValueError as ve:
-        flash(str(ve), "danger")
-        return redirect(url_for("status.list_recordings"))
+    # Find GPS and video files (skipped for ZIP to avoid server OOM)
+    # The frontend downloads these directly from S3 using presigned URLs
+    gps_files = []
+    video_file_info = (None, False)
     
     # Create ZIP file (uses pre-merged signs_merged.csv or falls back to runtime merge)
     zip_filename = f"{recording_id}_results.zip"
@@ -51,6 +50,51 @@ def download_zip(recording_id):
     )
     
     return send_file(mem_zip, as_attachment=True, download_name=zip_filename, mimetype="application/zip")
+
+
+@download_bp.route("/download/<recording_id>/urls", methods=["GET"])
+@login_required
+def download_presigned_urls(recording_id):
+    """Return presigned S3 URLs for video and GPS files.
+    
+    CSV and JSON are handled by the main download_zip endpoint to avoid memory issues with large files.
+    """
+    if not OrganizationService.can_access_recording(current_user, recording_id):
+        abort(403)
+
+    files = {"video": None, "gps": []}
+
+    recording = Recording.get_by_id(recording_id)
+    if recording:
+        s3_service = S3VideoService()
+        
+        # 1. Fetch video URL explicitly from the database field
+        # (This is more robust than relying on list_objects_v2 prefix matching)
+        if recording.video_s3_key:
+            filename = os.path.basename(recording.video_s3_key)
+            url = s3_service.generate_presigned_get(recording.video_s3_key, filename=filename)
+            if url:
+                files["video"] = {"url": url, "filename": filename}
+        
+        # 2. Fetch GPS CSV files dynamically using list_objects_v2
+        prefix = s3_service.get_recording_prefix(recording_id)
+        response = s3_service.s3_client.list_objects_v2(Bucket=s3_service.bucket, Prefix=prefix)
+        
+        for obj in response.get('Contents', []):
+            s3_key = obj['Key']
+            filename = os.path.basename(s3_key)
+            if not filename:
+                continue
+            
+            if filename.lower().endswith(".csv"):
+                url = s3_service.generate_presigned_get(s3_key, filename=filename)
+                if url:
+                    files["gps"].append({"url": url, "filename": filename})
+
+    return jsonify({
+        "recording_id": recording_id,
+        "files": files
+    })
 
 
 @download_bp.route("/download/<recording_id>/csv-only", methods=["GET"])
