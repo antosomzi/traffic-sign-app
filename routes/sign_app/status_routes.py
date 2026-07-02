@@ -11,6 +11,7 @@ from decorators.auth_decorators import auth_required
 from config import Config
 from services.sign_app.organization_service import OrganizationService
 from services.sign_app.signs_service import import_signs_for_recording, delete_signs_for_recording
+from services.sign_app.s3_service import S3VideoService
 from models.sign_app.user import User
 from models.sign_app.model_history import ModelHistory
 from models.sign_app.recording import Recording
@@ -328,13 +329,22 @@ def qaqc_redirect(recording_id):
         
         # 4. Prepare payload (Match exact QA/QC API format)
         filename = os.path.basename(s3_key) if s3_key else f"{recording_id}_cam.mp4"
+        
+        # Get GPS S3 key if available
+        s3_service = S3VideoService()
+        gps_s3_key = s3_service.get_first_gps_csv_key(s3_key) if s3_key else None
+        
         payload = {
             "filename": filename,
-            "s3Key": s3_key,
-            "outputJson": output_data
+            "videoS3Key": s3_key,
+            "outputJson": output_data,
+            "recordingId": recording_id
         }
         
-        print(f"[QA/QC] Payload prepared. Filename: {filename}, s3Key: {s3_key}")
+        if gps_s3_key:
+            payload["gpsFileS3Key"] = gps_s3_key
+        
+        print(f"[QA/QC] Payload prepared. Filename: {filename}, videoS3Key: {s3_key}, gpsFileS3Key: {gps_s3_key}")
         print(f"[QA/QC] Payload size in bytes (approx): {len(json.dumps(payload))}")
         
         # 5. Call external API

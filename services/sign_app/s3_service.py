@@ -213,6 +213,41 @@ class S3VideoService:
         except ClientError:
             return False
 
+    def get_first_gps_csv_key(self, video_s3_key: str) -> str | None:
+        """
+        Find the first CSV file in the same S3 folder as the video.
+        
+        Args:
+            video_s3_key: S3 key of the video file
+            
+        Returns:
+            S3 key of the first CSV file or None
+        """
+        if not video_s3_key:
+            return None
+            
+        prefix = os.path.dirname(video_s3_key)
+        if prefix:
+            prefix += '/'
+            
+        try:
+            response = self.s3_client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            if 'Contents' in response:
+                # First try to find a CSV file with 'gps' in the name
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    if key.lower().endswith('.csv') and 'gps' in key.lower():
+                        return key
+                # Fallback to any CSV file
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    if key.lower().endswith('.csv'):
+                        return key
+            return None
+        except ClientError as e:
+            print(f"❌ Failed to list S3 objects for prefix {prefix}: {e}")
+            return None
+
 
 def find_video_in_recording(recording_path: str) -> str | None:
     """
