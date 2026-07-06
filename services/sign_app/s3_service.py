@@ -114,6 +114,30 @@ class S3VideoService:
         print(f"✅ Video uploaded to S3: {s3_key}")
         
         return s3_key
+
+    def upload_bytes(self, file_bytes: bytes, s3_key: str) -> bool:
+        """
+        Upload bytes directly to S3 without saving locally.
+        
+        Args:
+            file_bytes: The data to upload
+            s3_key: The destination S3 key
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            print(f"📤 Uploading file to S3: {s3_key}")
+            self.s3_client.put_object(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Body=file_bytes
+            )
+            print(f"✅ File uploaded to S3: {s3_key}")
+            return True
+        except ClientError as e:
+            print(f"❌ Failed to upload bytes to S3: {e}")
+            return False
     
     def download_video(self, s3_key: str, local_path: str) -> bool:
         """

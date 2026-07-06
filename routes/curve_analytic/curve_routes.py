@@ -7,6 +7,7 @@ from decorators.auth_decorators import token_required, login_required, auth_requ
 
 from models.curve_analytic.curve import Curve
 from services.curve_analytic.ingestion import UploadValidationError, ingest_recording_zip
+from services.sign_app.s3_service import S3VideoService
 import json
 
 curves_bp = Blueprint("curves", __name__, url_prefix="/curves")
@@ -52,7 +53,16 @@ def upload_curves():
         return jsonify({"message": "Upload requires one .zip file in form field 'file'."}), 400
 
     try:
-        result = ingest_recording_zip(uploaded_file.read(), uploaded_file.filename, current_user.organization_id)
+        file_bytes = uploaded_file.read()
+        result = ingest_recording_zip(file_bytes, uploaded_file.filename, current_user.organization_id)
+        
+        # Upload the ZIP file to S3 in the corresponding recording prefix
+        recording_id = result["recordingId"]
+        s3_service = S3VideoService()
+        s3_key = f"{s3_service.get_recording_prefix(recording_id)}{uploaded_file.filename}"
+        s3_service.upload_bytes(file_bytes, s3_key)
+        
+
     except UploadValidationError as exc:
         return jsonify({"message": str(exc)}), 400
     except Exception as e:

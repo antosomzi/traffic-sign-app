@@ -119,6 +119,7 @@ erDiagram
     
     recordings }o--|| model_history : "processed by"
     recordings ||--o{ signs : "contains"
+    recordings ||--o| curve_recordings : "corresponds to"
     
     curve_recordings ||--o{ recording_curves : "has passes"
     curves ||--o{ recording_curves : "is driven in"
@@ -224,7 +225,7 @@ Recordings specifically gathered for curve analytics (distinct from sign app rec
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | Integer | **Primary Key** | Unique auto-increment ID |
-| `recording_id` | String | Unique, Not Null, Indexed | External/string ID for the recording |
+| `recording_id` | String | Unique, Not Null, Indexed | External/string ID (Soft **Foreign Key** to `recordings.id`) |
 | `organization_id` | Integer | **Foreign Key** (`organizations.id`, ON DELETE CASCADE), Not Null | Owning organization |
 | `device_id` | String | Not Null | Hardware device ID |
 | `imei_folder` | String | Not Null | Hardware IMEI associated |

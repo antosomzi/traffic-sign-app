@@ -24,6 +24,12 @@ class CurveRecording(Base):
         back_populates="recording",
         cascade="all, delete-orphan",
     )
+    sign_recording = relationship(
+        "Recording", 
+        primaryjoin="CurveRecording.recording_id == foreign(Recording.id)", 
+        viewonly=True,
+        uselist=False
+    )
 
     @staticmethod
     def get_by_recording_id(rec_id):

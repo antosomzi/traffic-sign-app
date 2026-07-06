@@ -75,6 +75,12 @@ class Recording(Base):
 
     user_rel = relationship("User", foreign_keys=[user_id], viewonly=True)
     model_history_rel = relationship("ModelHistory", foreign_keys=[model_history_id], viewonly=True)
+    curve_recording = relationship(
+        "CurveRecording", 
+        primaryjoin="Recording.id == foreign(CurveRecording.recording_id)", 
+        viewonly=True,
+        uselist=False
+    )
     
     @reconstructor
     def init_on_load(self):
