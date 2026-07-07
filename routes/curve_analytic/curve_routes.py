@@ -9,6 +9,7 @@ from models.curve_analytic.curve import Curve
 from services.curve_analytic.ingestion import UploadValidationError, ingest_recording_zip
 from services.sign_app.s3_service import S3VideoService
 import json
+import os
 
 curves_bp = Blueprint("curves", __name__, url_prefix="/curves")
 
@@ -79,3 +80,21 @@ def upload_curves():
         ),
         201,
     )
+
+@curves_bp.route("/download-zip/<recording_id>", methods=["GET"])
+@login_required
+def download_recording_zip(recording_id):
+    """Generate a presigned URL to download the ZIP file from S3."""
+    s3_service = S3VideoService()
+    zip_key = s3_service.get_zip_key(recording_id)
+    
+    if not zip_key:
+        return jsonify({"message": "No ZIP file found for this recording."}), 404
+        
+    filename = os.path.basename(zip_key)
+    presigned_url = s3_service.generate_presigned_get(zip_key, expiration=3600, filename=filename)
+    
+    if presigned_url:
+        return jsonify({"url": presigned_url})
+    else:
+        return jsonify({"message": "Failed to generate download link."}), 500

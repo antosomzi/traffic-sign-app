@@ -297,7 +297,14 @@
             <!-- Recording Selector -->
             <div class="recording-select-container">
                 <label class="info-label">Select Recording</label>
-                <select id="recording-selector"></select>
+                <div style="display: flex; gap: 8px;">
+                    <select id="recording-selector" style="flex: 1;"></select>
+                    <button id="download-zip-btn" class="btn btn-primary" title="Download ZIP" style="padding: 10px; display: flex; align-items: center; justify-content: center;">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Analysis Results Section -->
@@ -461,6 +468,7 @@
     // 4. Sidebar & Multi-Recording Logic
     const sidebar = document.getElementById('sidebar');
     const recordingSelector = document.getElementById('recording-selector');
+    const downloadZipBtn = document.getElementById('download-zip-btn');
     let charts = {};
     let currentCurve = null;
 
@@ -492,6 +500,35 @@
     recordingSelector.onchange = (e) => {
         const rec = currentCurve.recordings[e.target.value];
         updateRecordingView(rec);
+    };
+
+    downloadZipBtn.onclick = async () => {
+        if (!currentCurve || currentCurve.recordings.length === 0) return;
+        const selectedIndex = recordingSelector.value;
+        const rec = currentCurve.recordings[selectedIndex];
+        if (!rec || !rec.recordingId) return;
+
+        const originalHtml = downloadZipBtn.innerHTML;
+        try {
+            downloadZipBtn.disabled = true;
+            downloadZipBtn.innerHTML = '⏳';
+            
+            const response = await fetch(`/curves/download-zip/${rec.recordingId}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.url) {
+                    window.location.href = data.url;
+                }
+            } else {
+                const err = await response.json();
+                alert('Download failed: ' + (err.message || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Network error during download');
+        } finally {
+            downloadZipBtn.disabled = false;
+            downloadZipBtn.innerHTML = originalHtml;
+        }
     };
 
     function updateRecordingView(rec) {

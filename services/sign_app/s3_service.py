@@ -272,6 +272,31 @@ class S3VideoService:
             print(f"❌ Failed to list S3 objects for prefix {prefix}: {e}")
             return None
 
+    def get_zip_key(self, recording_id: str) -> str | None:
+        """
+        Find the first ZIP file in the recording's S3 folder.
+        
+        Args:
+            recording_id: Recording identifier
+            
+        Returns:
+            S3 key of the first ZIP file or None
+        """
+        if not recording_id:
+            return None
+            
+        prefix = self.get_recording_prefix(recording_id)
+        
+        try:
+            response = self.s3_client.list_objects_v2(Bucket=self.bucket, Prefix=prefix)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    if obj['Key'].lower().endswith('.zip'):
+                        return obj['Key']
+            return None
+        except ClientError as e:
+            print(f"❌ Failed to list S3 objects for prefix {prefix}: {e}")
+            return None
 
 def find_video_in_recording(recording_path: str) -> str | None:
     """
